@@ -197,7 +197,7 @@ describe('PrismRegistry — writeFile limits', () => {
     assert.ok(err.startsWith('ERR'), 'should return error when file count is exceeded');
     assert.ok(err.includes('LIMIT') || err.includes('limit') || err.includes('maximum'),
       `expected limit error, got: ${err}`);
-  }).timeout?.(60_000); // This test can be slow — increase if needed.
+  });
 
   it('updating an existing file does not count as a new file', () => {
     const reg = new PrismRegistry();

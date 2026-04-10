@@ -84,20 +84,19 @@ class PrismFSExtension {
     this._opfs = new OpfsBackend();
     this._permStores = new Map();
 
-    // Kick off OPFS initialisation in the background.
+    // Kick off OPFS initialisation in the background, then hydrate the
+    // default prisms (fs, tmp).
+    // NOTE: There is an inherent race condition between this async load and the
+    // first block method calls. For most TurboWarp projects this is not a
+    // problem because the project interacts with the extension after the
+    // green-flag script starts (by which time OPFS load has usually completed),
+    // but early block calls may not see files that were written in a previous
+    // session. This is an accepted trade-off of the fire-and-forget approach
+    // that keeps all block methods synchronous.
     this._opfs.init().then(available => {
       if (available) {
-        // Load all persistent prisms from OPFS into the in-memory registry.
         for (const name of this._registry.list()) {
-          if (this._registry.typeOf(name) === PRISM_TYPE.PRISM) {
-            this._opfs.loadPrism(name).then(files => {
-              if (files) {
-                for (const [path, content] of files) {
-                  this._registry.writeFile(name, path, content);
-                }
-              }
-            });
-          }
+          this._loadPrismFromOpfs(name);
         }
       }
     });
@@ -115,6 +114,24 @@ class PrismFSExtension {
   /** @param {...any} parts */
   _dbg(...parts) {
     if (this._debugLogging) console.log('PrismFS:', ...parts);
+  }
+
+  /**
+   * Asynchronously hydrate a persistent prism's in-memory registry from OPFS.
+   * No-op for temporary/immutable prisms or when OPFS is unavailable.
+   *
+   * @param {string} prismName  Lower-cased prism name.
+   */
+  _loadPrismFromOpfs(prismName) {
+    if (this._registry.typeOf(prismName) !== PRISM_TYPE.PRISM) return;
+    if (!this._opfs.isAvailable()) return;
+    this._opfs.loadPrism(prismName).then(files => {
+      if (files) {
+        for (const [path, content] of files) {
+          this._registry.writeFile(prismName, path, content);
+        }
+      }
+    });
   }
 
   /**
@@ -472,17 +489,8 @@ class PrismFSExtension {
     this._ensureInit();
     const result = this._registry.mount(String(args.NAME), String(args.TYPE));
     if (result) this._dbg(`mountPrism error: ${result}`);
-    // Load OPFS data for persistent prisms in the background.
-    const name = String(args.NAME).toLowerCase();
-    if (!result && String(args.TYPE) === PRISM_TYPE.PRISM && this._opfs.isAvailable()) {
-      this._opfs.loadPrism(name).then(files => {
-        if (files) {
-          for (const [path, content] of files) {
-            this._registry.writeFile(name, path, content);
-          }
-        }
-      });
-    }
+    // Load OPFS data for the newly mounted persistent prism (if available).
+    if (!result) this._loadPrismFromOpfs(String(args.NAME).toLowerCase());
     return result;
   }
 
@@ -869,6 +877,14 @@ class PrismFSExtension {
    * write event rather than every tick.  While the hat is "active" the UUID is
    * added to `_suppressedWatchers` to prevent the watcher's own script from
    * recursively re-triggering itself.
+   *
+   * Suppression is lifted via `queueMicrotask`, which runs after the current
+   * synchronous execution context completes.  This covers the common case of a
+   * script that writes synchronously within the same Scratch tick, but a script
+   * that uses `await` or yield-based blocks (e.g. `wait`) may allow the
+   * suppression window to expire before the write happens.  This is a
+   * best-effort implementation; full re-entrancy prevention would require
+   * deeper integration with the TurboWarp scheduler.
    */
   onFileChanged(args) {
     this._ensureInit();
