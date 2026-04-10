@@ -1,0 +1,51 @@
+{
+  "type": "module",
+  "name": "@triflare/mint-tooling",
+  "version": "2.1.0",
+  "description": "A simple and painless custom TurboWarp extension development platform, powered by bundling.",
+  "main": "build/extension.js",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "build:clean": "node scripts/build.js --clean-cache",
+    "build:prod": "node scripts/build.js --production",
+    "build:sourcemap": "node scripts/build.js --sourcemap",
+    "build:prod:inline-sourcemap": "node scripts/build.js --production --inline-sourcemap",
+    "build:recommended": "node scripts/build.js",
+    "watch": "node scripts/build.js --watch",
+    "watch:notify": "node scripts/build.js --watch --notify",
+    "serve": "node scripts/serve.js",
+    "init": "node scripts/init.js",
+    "update:mint": "node scripts/update-mint.js",
+    "lint": "eslint src/",
+    "lint:fix": "eslint --fix src/",
+    "format": "prettier --write src/",
+    "validate": "node scripts/validate.js",
+    "validate:assets": "node scripts/validate-assets.js",
+    "asset:list": "node scripts/asset.js list",
+    "asset:add": "node scripts/asset.js add",
+    "asset:remove": "node scripts/asset.js remove",
+    "test": "node scripts/test.js",
+    "test:watch": "node scripts/test.js --watch",
+    "typecheck": "tsc --noEmit",
+    "fullstack": "npm run format && npm run lint && npm run validate && npm run build && npm run test"
+  },
+  "keywords": [
+    "turbowarp",
+    "scratch",
+    "extension",
+    "mint-tooling",
+    "extension-template",
+    "turbowarp-extension"
+  ],
+  "author": "",
+  "license": "SEE LICENSE IN LICENSE",
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "chokidar": "^5.0.0",
+    "esbuild": "^0.28.0",
+    "eslint": "^10.2.0",
+    "globals": "^17.4.0",
+    "prettier": "^3.0.0",
+    "terser": "^5.46.1"
+  }
+}
