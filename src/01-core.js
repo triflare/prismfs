@@ -185,7 +185,7 @@ class PrismFSExtension {
     for (const name of names) {
       const type = this._registry.typeOf(name);
       // typeOf returns undefined/error for prisms that were just cleaned up.
-      if (!type || type !== PRISM_TYPE.PRISM) {
+      if (isError(type) || type !== PRISM_TYPE.PRISM) {
         this._clearPrismState(name);
       }
     }
@@ -705,7 +705,7 @@ class PrismFSExtension {
       }
     } else if (format === 'datauri') {
       try {
-        const b64 = rawContent.replace(/^data:[^;]+;base64,/, '');
+        const b64 = rawContent.replace(/^data:[^;]+(;[^;]+)*;base64,/, '');
         const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
         rawContent = new TextDecoder().decode(bytes);
       } catch {

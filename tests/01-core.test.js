@@ -37,7 +37,7 @@ describe('PrismFSExtension — getInfo()', () => {
     assert.equal(extension.getInfo().name, 'PrismFS');
   });
 
-  it('uses light-red accent colors', () => {
+  it('uses light-blue accent colors', () => {
     const info = extension.getInfo();
     assert.equal(info.color1, '#44a2ff');
     assert.equal(info.color2, '#2177cd');

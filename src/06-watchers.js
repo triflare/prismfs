@@ -13,8 +13,7 @@
  *    error string and logs a debug message.
  */
 
-import { MAX_WATCHERS, Errors } from './02-fs-utils.js';
-import { matchesPattern } from './02-fs-utils.js';
+import { MAX_WATCHERS, Errors, matchesPattern } from './02-fs-utils.js';
 
 /** @typedef {{ uuid: string, pattern: string, sprite: string }} WatcherEntry */
 

@@ -103,12 +103,20 @@ export class OpfsBackend {
   async writeFile(prism, filePath, content) {
     const dir = await this._prismDir(prism, { create: true });
     if (!dir) return;
+    let writable;
     try {
       const handle = await dir.getFileHandle(encodeURIComponent(filePath), { create: true });
-      const writable = await handle.createWritable();
+      writable = await handle.createWritable();
       await writable.write(content);
       await writable.close();
     } catch {
+      if (writable) {
+        try {
+          await writable.abort();
+        } catch {
+          // Silently fail if abort also fails
+        }
+      }
       // Silently fail — in-memory registry is the fallback
     }
   }

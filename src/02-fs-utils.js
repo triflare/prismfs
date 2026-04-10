@@ -91,7 +91,7 @@ export const Errors = Object.freeze({
  */
 export function parseUri(uri) {
   if (typeof uri !== 'string') return null;
-  const match = uri.match(/^([A-Za-z][A-Za-z0-9_-]*):\/{2}(.*)/s);
+  const match = uri.match(/^([A-Za-z][A-Za-z0-9_-]*):\/{2}(.*)/);
   if (!match) return null;
   return { prism: match[1].toLowerCase(), filePath: match[2] };
 }
@@ -121,9 +121,10 @@ export function matchesPattern(pattern, path) {
   // Escape all regex special chars except `*`, then expand wildcards.
   // Process `**` before `*` to avoid double-expansion.
   const regexStr = pattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/[.?+^${}()|[\]\\]/g, '\\$&')
     .replace(/\*\*/g, '<GLOBSTAR>')
     .replace(/\*/g, '[^/]*')
+    .replace(/\?/g, '[^/]')
     .replace(/<GLOBSTAR>/g, '.*');
   return new RegExp(`^${regexStr}$`).test(path);
 }

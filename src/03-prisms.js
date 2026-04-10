@@ -19,7 +19,7 @@ import {
 
 /**
  * @typedef {{ content: string, createdAt: number, modifiedAt: number }} FileEntry
- * @typedef {{ type: string, files: Map<string, FileEntry>, dirs: Set<string> }} PrismEntry
+ * @typedef {{ type: string, files: Map<string, FileEntry> }} PrismEntry
  */
 
 export class PrismRegistry {
@@ -40,7 +40,7 @@ export class PrismRegistry {
    * @returns {PrismEntry}
    */
   _createEntry(name, type) {
-    const entry = { type, files: new Map(), dirs: new Set() };
+    const entry = { type, files: new Map() };
     this._prisms.set(name, entry);
     return entry;
   }
@@ -177,7 +177,7 @@ export class PrismRegistry {
     // Enforce maximum file size.
     // TextEncoder.encode gives the UTF-8 byte length, but avoid allocating the
     // full buffer for large strings by using a rough byte-length estimate first.
-    const roughBytes = content.length * 4; // worst case: 4 bytes per UTF-16 code unit
+    const roughBytes = content.length * 3; // worst case: 3 bytes per UTF-16 code unit
     if (roughBytes > MAX_FILE_SIZE_BYTES) {
       // Only do the precise (slower) check if the rough estimate exceeds the limit.
       const exactBytes = new TextEncoder().encode(content).byteLength;

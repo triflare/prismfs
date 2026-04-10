@@ -17,10 +17,8 @@ export class PermissionStore {
   constructor() {
     /**
      * Map from normalised path (or empty string for the prism root) to a Set
-     * of granted permissions. Each Set is wrapped in `Object.freeze()` to
-     * signal intent, but note that `Object.freeze` does not prevent Set
-     * mutations (add/delete still work on frozen Sets). Callers that need a
-     * stable snapshot should use `resolve()`, which returns a defensive copy.
+     * of granted permissions. Callers that need a stable snapshot should use
+     * `resolve()`, which returns a defensive copy.
      *
      * @type {Map<string, Set<string>>}
      */
@@ -41,7 +39,7 @@ export class PermissionStore {
         return Errors.invalid(`Unknown permission: "${p}".`);
       }
     }
-    this._map.set(path, Object.freeze(perms));
+    this._map.set(path, perms);
     return '';
   }
 

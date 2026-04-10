@@ -70,7 +70,9 @@ export class MetadataStore {
       return Errors.invalid(`"${tag}" is a built-in metadata tag and cannot be set manually.`);
     }
     if (value.length > MAX_METADATA_TAG_BYTES / 2) {
-      // JS strings are UTF-16; each char = 2 bytes worst case.
+      // string.length counts UTF-16 code units (each code unit is 2 bytes).
+      // Characters outside the BMP are represented as surrogate pairs (two code units = 4 bytes),
+      // so using value.length with MAX_METADATA_TAG_BYTES/2 is correct.
       return Errors.limit(`Metadata tag "${tag}" value exceeds the 32 KB size limit.`);
     }
 
