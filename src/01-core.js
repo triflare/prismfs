@@ -65,6 +65,11 @@ class PrismFSExtension {
     // UUIDs whose scripts are currently executing — suppress re-entrancy.
     /** @type {Set<string>} */
     this._suppressedWatchers = new Set();
+
+    // Pending OPFS writes that arrived before init() resolved.
+    // Each entry is { prismName, filePath, content }.
+    /** @type {Array<{prismName: string, filePath: string, content: string}>} */
+    this._opfsPendingWrites = [];
   }
 
   // ─── Lazy initialisation ──────────────────────────────────────────────────
@@ -85,7 +90,7 @@ class PrismFSExtension {
     this._permStores = new Map();
 
     // Kick off OPFS initialisation in the background, then hydrate the
-    // default prisms (fs, tmp).
+    // default prisms (fs, tmp) and flush any writes that arrived before init.
     // NOTE: There is an inherent race condition between this async load and the
     // first block method calls. For most TurboWarp projects this is not a
     // problem because the project interacts with the extension after the
@@ -98,12 +103,17 @@ class PrismFSExtension {
         for (const name of this._registry.list()) {
           this._loadPrismFromOpfs(name);
         }
+        // Flush writes that arrived while init() was in-flight.
+        for (const { prismName, filePath, content } of this._opfsPendingWrites) {
+          this._opfs.writeFile(prismName, filePath, content);
+        }
       }
+      this._opfsPendingWrites = [];
     });
 
     // Attach TurboWarp/Scratch runtime hooks for green-flag / project-stop.
     if (this._runtime) {
-      const cleanup = () => this._registry.cleanupTemporary();
+      const cleanup = () => this._cleanupNonPersistentPrisms();
       this._runtime.on('PROJECT_RUN_START', cleanup);
       this._runtime.on('PROJECT_STOP_ALL', cleanup);
     }
@@ -132,6 +142,53 @@ class PrismFSExtension {
         }
       }
     });
+  }
+
+  /**
+   * Persist a write to OPFS.  If OPFS is still initialising, the write is
+   * queued and flushed once `init()` resolves, so early block-method writes
+   * are not silently lost.
+   *
+   * @param {string} prismName
+   * @param {string} filePath
+   * @param {string} content
+   */
+  _opfsWrite(prismName, filePath, content) {
+    if (this._opfs.isAvailable()) {
+      this._opfs.writeFile(prismName, filePath, content);
+    } else {
+      // Queue the write; it will be flushed after init() resolves.
+      this._opfsPendingWrites.push({ prismName, filePath, content });
+    }
+  }
+
+  /**
+   * Remove all in-memory state associated with a specific prism
+   * (permission stores, metadata entries).
+   *
+   * @param {string} prismName  Lower-cased prism name.
+   */
+  _clearPrismState(prismName) {
+    this._permStores.delete(prismName);
+    this._metadata.clearPrism(prismName);
+  }
+
+  /**
+   * Unmount all non-persistent prisms (temporary and immutable) and clear
+   * their associated per-prism state.  Called on PROJECT_RUN_START and
+   * PROJECT_STOP_ALL.
+   */
+  _cleanupNonPersistentPrisms() {
+    // Snapshot the list before cleanup so deletions don't affect iteration.
+    const names = this._registry.list();
+    this._registry.cleanupTemporary();
+    for (const name of names) {
+      const type = this._registry.typeOf(name);
+      // typeOf returns undefined/error for prisms that were just cleaned up.
+      if (!type || (type !== PRISM_TYPE.PRISM)) {
+        this._clearPrismState(name);
+      }
+    }
   }
 
   /**
@@ -180,13 +237,25 @@ class PrismFSExtension {
   }
 
   /**
-   * Return the calling sprite name, or "unknown" if unavailable.
+   * Return the calling sprite name from the Scratch block util, with a
+   * fallback chain to the runtime editing target.
    *
+   * The Scratch/TurboWarp block execution model passes a `util` object as the
+   * second argument to every block method.  `util.target` reliably identifies
+   * which target (sprite) is executing the block — even in player mode where
+   * `runtime.getEditingTarget()` would return the editor-selected sprite
+   * instead.
+   *
+   * @param {object | undefined} util  The Scratch block util object.
    * @returns {string}
    */
-  _callerSpriteName() {
+  _callerSpriteName(util) {
     try {
-      return this._runtime?.getEditingTarget?.()?.sprite?.name ?? 'unknown';
+      return (
+        util?.target?.sprite?.name ??
+        this._runtime?.getEditingTarget?.()?.sprite?.name ??
+        'unknown'
+      );
     } catch {
       return 'unknown';
     }
@@ -194,14 +263,19 @@ class PrismFSExtension {
 
   /**
    * Encode a string to base64 in a UTF-8-safe way.
+   * Uses a chunked loop to avoid quadratic string-concat overhead for large
+   * inputs (avoids repeated string reallocation).
    *
    * @param {string} str
    * @returns {string}
    */
   _toBase64(str) {
     const bytes = new TextEncoder().encode(str);
+    const CHUNK = 8192;
     let binary = '';
-    for (const byte of bytes) binary += String.fromCharCode(byte);
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+    }
     return btoa(binary);
   }
 
@@ -496,8 +570,19 @@ class PrismFSExtension {
 
   unmountPrism(args) {
     this._ensureInit();
-    const result = this._registry.unmount(String(args.NAME));
-    if (result) this._dbg(`unmountPrism error: ${result}`);
+    const name = String(args.NAME).toLowerCase();
+    const type = this._registry.typeOf(name);
+    const result = this._registry.unmount(name);
+    if (result) {
+      this._dbg(`unmountPrism error: ${result}`);
+      return;
+    }
+    // Remove per-prism state so a remounted prism starts clean.
+    this._clearPrismState(name);
+    // Delete OPFS data for persistent prisms so the data doesn't accumulate.
+    if (type === PRISM_TYPE.PRISM && this._opfs.isAvailable()) {
+      this._opfs.deletePrism(name);
+    }
   }
 
   isPrismMounted(args) {
@@ -560,7 +645,7 @@ class PrismFSExtension {
     return content;
   }
 
-  writeFile(args) {
+  writeFile(args, util) {
     this._ensureInit();
     const resolved = this._resolveUri(String(args.URI));
     if (isError(resolved)) return;
@@ -579,7 +664,7 @@ class PrismFSExtension {
     }
 
     const uri = `${prism}://${filePath}`;
-    const sprite = this._callerSpriteName();
+    const sprite = this._callerSpriteName(util);
     if (isNew) {
       this._metadata.initBuiltin(uri, sprite);
     } else {
@@ -587,8 +672,8 @@ class PrismFSExtension {
     }
 
     // Persist to OPFS asynchronously (fire-and-forget for persistent prisms).
-    if (this._registry.typeOf(prism) === PRISM_TYPE.PRISM && this._opfs.isAvailable()) {
-      this._opfs.writeFile(prism, filePath, String(args.CONTENT));
+    if (this._registry.typeOf(prism) === PRISM_TYPE.PRISM) {
+      this._opfsWrite(prism, filePath, String(args.CONTENT));
     }
 
     this._notifyWatchers(uri);
@@ -598,7 +683,7 @@ class PrismFSExtension {
    * Write content that is already encoded (base64 or data: URI) and decode it
    * before storing.
    */
-  writeFileAs(args) {
+  writeFileAs(args, util) {
     this._ensureInit();
     const resolved = this._resolveUri(String(args.URI));
     if (isError(resolved)) return;
@@ -631,7 +716,7 @@ class PrismFSExtension {
       }
     }
 
-    this.writeFile({ URI: args.URI, CONTENT: rawContent });
+    this.writeFile({ URI: args.URI, CONTENT: rawContent }, util);
   }
 
   deleteFile(args) {
@@ -736,8 +821,15 @@ class PrismFSExtension {
     const all = this._registry.listFiles(prism, filePath || undefined);
     if (isError(all)) return all;
 
-    const pattern = String(args.PATTERN);
-    const filtered = all.filter(p => matchesPattern(pattern, p));
+    const rawPattern = String(args.PATTERN);
+    // If the pattern contains "://" it is a full URI pattern; pass through
+    // as-is.  Otherwise it is a path glob — construct the full URI pattern so
+    // matchesPattern can compare scheme + path correctly.
+    const pattern = rawPattern.includes('://')
+      ? rawPattern
+      : `${prism}://${rawPattern.startsWith('**/') ? rawPattern : `**/${rawPattern}`}`;
+
+    const filtered = all.filter(p => matchesPattern(pattern, `${prism}://${p}`));
     return JSON.stringify(filtered);
   }
 
@@ -857,7 +949,10 @@ class PrismFSExtension {
     }
 
     const prismName = backupObj.name.toLowerCase();
-    if (this._registry.isMounted(prismName)) this._registry.unmount(prismName);
+    if (this._registry.isMounted(prismName)) {
+      this._registry.unmount(prismName);
+      this._clearPrismState(prismName);
+    }
 
     const mountResult = this._registry.mount(prismName, backupObj.type ?? PRISM_TYPE.PRISM);
     if (mountResult) {
@@ -866,13 +961,18 @@ class PrismFSExtension {
     }
 
     if (backupObj.files && typeof backupObj.files === 'object') {
+      const isPersistent = String(backupObj.type ?? PRISM_TYPE.PRISM) === PRISM_TYPE.PRISM;
       for (const [path, f] of Object.entries(backupObj.files)) {
         this._registry.writeFile(prismName, path, f.content ?? '');
-        if (
-          String(backupObj.type ?? PRISM_TYPE.PRISM) === PRISM_TYPE.PRISM &&
-          this._opfs.isAvailable()
-        ) {
-          this._opfs.writeFile(prismName, path, f.content ?? '');
+      }
+      // Persist the whole prism to OPFS in one pass after hydrating in-memory
+      // (avoids per-file write-amplification in the restore loop).
+      if (isPersistent) {
+        const allFiles = this._registry.snapshotFiles(prismName);
+        if (allFiles) {
+          for (const [path, entry] of allFiles) {
+            this._opfsWrite(prismName, path, entry.content ?? '');
+          }
         }
       }
     }
@@ -880,9 +980,9 @@ class PrismFSExtension {
 
   // ─── Block implementations: file watching ────────────────────────────────
 
-  watchPath(args) {
+  watchPath(args, util) {
     this._ensureInit();
-    const result = this._watchers.register(String(args.PATTERN), this._callerSpriteName());
+    const result = this._watchers.register(String(args.PATTERN), this._callerSpriteName(util));
     // If quota was reached, the error string is returned to the caller AND
     // logged so the developer can diagnose it via debug logging.
     if (isError(result)) this._dbg(`watchPath: quota or error: ${result}`);

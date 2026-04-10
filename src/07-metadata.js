@@ -109,4 +109,19 @@ export class MetadataStore {
     if (!bucket) return {};
     return Object.fromEntries(bucket.entries());
   }
+
+  /**
+   * Remove all metadata entries whose key begins with a given prism URI prefix.
+   * Called when a prism is unmounted or cleaned up.
+   *
+   * @param {string} prismName  Lower-cased prism name.
+   */
+  clearPrism(prismName) {
+    const prefix = `${prismName}://`;
+    for (const key of this._store.keys()) {
+      if (key === prismName || key.startsWith(prefix)) {
+        this._store.delete(key);
+      }
+    }
+  }
 }

@@ -86,7 +86,7 @@ describe('PrismRegistry — unmount()', () => {
 // ─── cleanupTemporary() ──────────────────────────────────────────────────────
 
 describe('PrismRegistry — cleanupTemporary()', () => {
-  it('removes temporary prisms and keeps normal ones', () => {
+  it('removes temporary prisms and keeps persistent ones', () => {
     const reg = new PrismRegistry();
     reg.mount('persist', PRISM_TYPE.PRISM);
     reg.mount('cache', PRISM_TYPE.TEMPORARY);
@@ -95,6 +95,22 @@ describe('PrismRegistry — cleanupTemporary()', () => {
     assert.ok(reg.isMounted('persist'));
     assert.equal(reg.isMounted('cache'), false);
     assert.equal(reg.isMounted('tmp'), false); // default tmp removed too
+  });
+
+  it('also removes immutable prisms on green flag (per docs)', () => {
+    const reg = new PrismRegistry();
+    reg.mount('readonly', PRISM_TYPE.IMMUTABLE);
+    reg.cleanupTemporary();
+
+    assert.equal(reg.isMounted('readonly'), false);
+  });
+
+  it('leaves persistent prisms intact', () => {
+    const reg = new PrismRegistry();
+    reg.mount('docs', PRISM_TYPE.PRISM);
+    reg.cleanupTemporary();
+
+    assert.ok(reg.isMounted('docs'));
   });
 });
 

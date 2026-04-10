@@ -203,6 +203,23 @@ describe('PrismFSExtension — directory operations', () => {
     const results = JSON.parse(extension.searchFiles({ URI: 'fs://', PATTERN: '*.txt' }));
     assert.ok(results.every(r => r.endsWith('.txt')));
   });
+
+  it('searchFiles matches nested files with path-only patterns (implicit **/ prefix)', () => {
+    extension.writeFile({ URI: 'fs://deep/a/b/c.md', CONTENT: 'deep' });
+    extension.writeFile({ URI: 'fs://deep/x.txt', CONTENT: 'shallow' });
+    // Path-only "*.md" should match "deep/a/b/c.md" via implicit **/ prefix.
+    const results = JSON.parse(extension.searchFiles({ URI: 'fs://', PATTERN: '*.md' }));
+    assert.ok(results.some(r => r.endsWith('c.md')));
+    assert.equal(results.some(r => r.endsWith('.txt')), false);
+  });
+
+  it('searchFiles accepts a full URI pattern', () => {
+    extension.writeFile({ URI: 'fs://spec/a.txt', CONTENT: 'a' });
+    extension.writeFile({ URI: 'fs://spec/b.png', CONTENT: 'b' });
+    const results = JSON.parse(extension.searchFiles({ URI: 'fs://', PATTERN: 'fs://**/*.txt' }));
+    assert.ok(results.some(r => r.endsWith('a.txt')));
+    assert.equal(results.some(r => r.endsWith('b.png')), false);
+  });
 });
 
 // ─── Permission blocks ────────────────────────────────────────────────────────
@@ -385,5 +402,21 @@ describe('PrismFSExtension — onFileChanged hat', () => {
       'should fire again after second write'
     );
     assert.equal(extension.onFileChanged({ UUID: uuid }), false);
+  });
+});
+
+// ─── unmountPrism state cleanup ───────────────────────────────────────────────
+
+describe('PrismFSExtension — unmountPrism state cleanup', () => {
+  it('clears permission state when prism is unmounted', () => {
+    extension.mountPrism({ NAME: 'statetest', TYPE: 'prism' });
+    extension.setPermission({ URI: 'statetest://file.txt', PERM: 'read', VALUE: 'false' });
+    extension.unmountPrism({ NAME: 'statetest' });
+    // Remount the prism — it should start with default (all) permissions.
+    extension.mountPrism({ NAME: 'statetest', TYPE: 'prism' });
+    assert.ok(
+      extension.hasPermission({ URI: 'statetest://file.txt', PERM: 'read' }),
+      'permissions should be reset after remount'
+    );
   });
 });

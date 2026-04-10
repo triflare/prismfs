@@ -38,7 +38,7 @@
     "turbowarp-extension"
   ],
   "author": "",
-  "license": "GPL-3.0",
+  "license": "GPL-3.0-only",
   "devDependencies": {
     "@eslint/js": "^10.0.0",
     "chokidar": "^5.0.0",

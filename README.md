@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="src/assets/icons/menu.svg" alt="Mint logo" width="100">
+  <img src="src/assets/icons/menu.svg" alt="PrismFS logo" width="100">
 </p>
 
 # PrismFS

@@ -136,12 +136,14 @@ export class PrismRegistry {
   }
 
   /**
-   * Unmount and discard all temporary prisms.
+   * Unmount and discard all non-persistent prisms (temporary and immutable).
    * Called when the green flag is clicked or the project is stopped.
+   * Persistent `prism`-type prisms are preserved so their OPFS-backed data
+   * survives the reset.
    */
   cleanupTemporary() {
     for (const [name, entry] of this._prisms.entries()) {
-      if (entry.type === PRISM_TYPE.TEMPORARY) {
+      if (entry.type === PRISM_TYPE.TEMPORARY || entry.type === PRISM_TYPE.IMMUTABLE) {
         this._prisms.delete(name);
       }
     }

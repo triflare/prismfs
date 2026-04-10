@@ -16,10 +16,13 @@ export { PERMISSION };
 export class PermissionStore {
   constructor() {
     /**
-     * Map from normalised path (or empty string for the prism root) to an
-     * immutable frozen Set of granted permissions.
+     * Map from normalised path (or empty string for the prism root) to a Set
+     * of granted permissions. Each Set is wrapped in `Object.freeze()` to
+     * signal intent, but note that `Object.freeze` does not prevent Set
+     * mutations (add/delete still work on frozen Sets). Callers that need a
+     * stable snapshot should use `resolve()`, which returns a defensive copy.
      *
-     * @type {Map<string, ReadonlySet<string>>}
+     * @type {Map<string, Set<string>>}
      */
     this._map = new Map();
   }
