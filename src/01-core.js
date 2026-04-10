@@ -211,11 +211,11 @@ class PrismFSExtension {
     return {
       id: 'prismFS',
       name: Scratch.translate('PrismFS'),
-      color1: '#FF4444',
-      color2: '#CC2222',
-      color3: '#AA0000',
-      menuIconURI: mint.assets.get('icons/menu.png') ?? '',
-      blockIconURI: mint.assets.get('icons/block.png') ?? '',
+      color1: '#44a2ff',
+      color2: '#2177cd',
+      color3: '#1c5fa2',
+      menuIconURI: mint.assets.get('icons/menu.svg') ?? '',
+      // blockIconURI: No block icon URI, because block icon URIs are your mom's ligma.
       menus: {
         prismType: {
           acceptReporters: true,
