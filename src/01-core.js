@@ -185,7 +185,7 @@ class PrismFSExtension {
     for (const name of names) {
       const type = this._registry.typeOf(name);
       // typeOf returns undefined/error for prisms that were just cleaned up.
-      if (!type || (type !== PRISM_TYPE.PRISM)) {
+      if (!type || type !== PRISM_TYPE.PRISM) {
         this._clearPrismState(name);
       }
     }
@@ -252,9 +252,7 @@ class PrismFSExtension {
   _callerSpriteName(util) {
     try {
       return (
-        util?.target?.sprite?.name ??
-        this._runtime?.getEditingTarget?.()?.sprite?.name ??
-        'unknown'
+        util?.target?.sprite?.name ?? this._runtime?.getEditingTarget?.()?.sprite?.name ?? 'unknown'
       );
     } catch {
       return 'unknown';

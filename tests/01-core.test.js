@@ -210,7 +210,10 @@ describe('PrismFSExtension — directory operations', () => {
     // Path-only "*.md" should match "deep/a/b/c.md" via implicit **/ prefix.
     const results = JSON.parse(extension.searchFiles({ URI: 'fs://', PATTERN: '*.md' }));
     assert.ok(results.some(r => r.endsWith('c.md')));
-    assert.equal(results.some(r => r.endsWith('.txt')), false);
+    assert.equal(
+      results.some(r => r.endsWith('.txt')),
+      false
+    );
   });
 
   it('searchFiles accepts a full URI pattern', () => {
@@ -218,7 +221,10 @@ describe('PrismFSExtension — directory operations', () => {
     extension.writeFile({ URI: 'fs://spec/b.png', CONTENT: 'b' });
     const results = JSON.parse(extension.searchFiles({ URI: 'fs://', PATTERN: 'fs://**/*.txt' }));
     assert.ok(results.some(r => r.endsWith('a.txt')));
-    assert.equal(results.some(r => r.endsWith('b.png')), false);
+    assert.equal(
+      results.some(r => r.endsWith('b.png')),
+      false
+    );
   });
 });
 
