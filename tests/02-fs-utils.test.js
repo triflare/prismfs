@@ -134,6 +134,17 @@ describe('formatError() and isError()', () => {
     assert.equal(isError(null), false);
     assert.equal(isError(42), false);
   });
+
+  it('isError requires an uppercase letter after ERR (tight prefix)', () => {
+    // Strings that START with "ERR" but not followed by an uppercase letter
+    // should NOT be treated as errors (avoids false positives with file content).
+    assert.equal(isError('ERR'), false, '"ERR" alone is not an error');
+    assert.equal(isError('ERRored file content'), false, 'lowercase after ERR is not an error');
+    assert.equal(isError('ERR1INVALID'), false, 'digit after ERR is not an error');
+    // Properly formed errors SHOULD be detected.
+    assert.ok(isError('ERRNOTFOUND: x'));
+    assert.ok(isError('ERRPERMISSION: denied'));
+  });
 });
 
 // ─── Errors namespace ────────────────────────────────────────────────────────

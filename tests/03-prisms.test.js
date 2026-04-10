@@ -180,3 +180,29 @@ describe('PrismRegistry — file operations', () => {
     assert.ok(reg.fileExists('fs', 'snap.txt'));
   });
 });
+
+// ─── writeFile limits ─────────────────────────────────────────────────────────
+
+describe('PrismRegistry — writeFile limits', () => {
+  it('enforces MAX_FILES_PER_PRISM', async () => {
+    const { MAX_FILES_PER_PRISM } = await import('../src/02-fs-utils.js');
+    const reg = new PrismRegistry();
+    reg.mount('limitedprism', PRISM_TYPE.PRISM);
+
+    for (let i = 0; i < MAX_FILES_PER_PRISM; i++) {
+      reg.writeFile('limitedprism', `file-${i}.txt`, 'data');
+    }
+
+    const err = reg.writeFile('limitedprism', 'overflow.txt', 'data');
+    assert.ok(err.startsWith('ERR'), 'should return error when file count is exceeded');
+    assert.ok(err.includes('LIMIT') || err.includes('limit') || err.includes('maximum'),
+      `expected limit error, got: ${err}`);
+  }).timeout?.(60_000); // This test can be slow — increase if needed.
+
+  it('updating an existing file does not count as a new file', () => {
+    const reg = new PrismRegistry();
+    reg.writeFile('fs', 'update.txt', 'v1');
+    const err = reg.writeFile('fs', 'update.txt', 'v2');
+    assert.equal(err, '', 'updating an existing file should always succeed');
+  });
+});

@@ -5,9 +5,12 @@
  * Instead of a single root folder, files are organised into named "prisms"
  * addressed with a URI scheme: `prism-name://path/to/file.ext`.
  *
- * Load order note: this file is numbered 01-* so Mint bundles it last (after
- * the helper modules 02–07 have been processed), making their exports available
- * when this file's top-level import statements execute.
+ * IMPORTANT — Mint bundle ordering:
+ * `01-core.js` is concatenated FIRST inside the bundle IIFE (alphabetically
+ * before 02–08).  All module-level code that references helper classes must
+ * therefore be deferred until after the IIFE has finished initialising.
+ * Use `_ensureInit()` at the start of every public method — never instantiate
+ * helper classes at module scope or inside the constructor.
  */
 
 import { PrismRegistry } from './03-prisms.js';
@@ -15,6 +18,7 @@ import { PermissionStore, PERMISSION } from './04-permissions.js';
 import { SnapshotManager } from './05-snapshots.js';
 import { WatcherManager } from './06-watchers.js';
 import { MetadataStore } from './07-metadata.js';
+import { OpfsBackend } from './08-opfs.js';
 import {
   parseUri,
   normalisePath,
@@ -24,70 +28,167 @@ import {
   PRISM_TYPE,
 } from './02-fs-utils.js';
 
-// ─── Singleton managers ──────────────────────────────────────────────────────
-
-const registry = new PrismRegistry();
-const snapshotMgr = new SnapshotManager();
-const watcherMgr = new WatcherManager();
-const metadataMgr = new MetadataStore();
-
-/** @type {Map<string, PermissionStore>} prism name → permission store */
-const permStores = new Map();
-
-/** @type {boolean} */
-let debugLogging = false;
-
-// ─── Internal helpers ────────────────────────────────────────────────────────
-
-/** @param {...any} args */
-function dbg(...args) {
-  if (debugLogging) console.log('PrismFS:', ...args);
-}
-
-/**
- * Resolve a URI and verify the prism is mounted.
- *
- * @param {string} uri
- * @returns {{ prism: string, filePath: string } | string}
- */
-function resolveUri(uri) {
-  const parsed = parseUri(uri);
-  if (!parsed) return Errors.invalidUri(`"${uri}" is not a valid PrismFS URI.`);
-  if (!registry.isMounted(parsed.prism)) {
-    return Errors.notFound(`Prism "${parsed.prism}" is not mounted.`);
-  }
-  return { prism: parsed.prism, filePath: normalisePath(parsed.filePath) };
-}
-
-/**
- * Get (or lazily create) the PermissionStore for a prism.
- *
- * @param {string} prismName
- * @returns {PermissionStore}
- */
-function getPermStore(prismName) {
-  if (!permStores.has(prismName)) permStores.set(prismName, new PermissionStore());
-  return permStores.get(prismName);
-}
-
-/**
- * Notify watchers that a URI was written to.
- *
- * @param {string} uri
- */
-function notifyWatchers(uri) {
-  const matches = watcherMgr.getMatching(uri);
-  for (const w of matches) {
-    dbg(`watcher ${w.uuid} triggered by write to ${uri}`);
-  }
-}
-
 // ─── Extension class ─────────────────────────────────────────────────────────
 
 class PrismFSExtension {
-  constructor() {
-    this._runtime = null;
+  /**
+   * @param {object | null} runtime  Scratch VM runtime (Scratch.vm?.runtime).
+   */
+  constructor(runtime) {
+    this._runtime = runtime ?? null;
+
+    // All manager instances are created lazily in _ensureInit() because
+    // 01-core.js appears before 02–08 in the bundle and the class bodies of
+    // PrismRegistry, SnapshotManager, etc. are not yet defined at the moment
+    // the constructor is called (Scratch.extensions.register).
+    this._initialized = false;
+
+    // Set below by _ensureInit():
+    /** @type {PrismRegistry | null} */
+    this._registry = null;
+    /** @type {SnapshotManager | null} */
+    this._snapshots = null;
+    /** @type {WatcherManager | null} */
+    this._watchers = null;
+    /** @type {MetadataStore | null} */
+    this._metadata = null;
+    /** @type {OpfsBackend | null} */
+    this._opfs = null;
+    /** @type {Map<string, PermissionStore>} */
+    this._permStores = null;
+    /** @type {boolean} */
+    this._debugLogging = false;
+
+    // UUIDs whose hat blocks should fire on the next poll (edge-triggered).
+    /** @type {Set<string>} */
+    this._pendingWatchers = new Set();
+    // UUIDs whose scripts are currently executing — suppress re-entrancy.
+    /** @type {Set<string>} */
+    this._suppressedWatchers = new Set();
   }
+
+  // ─── Lazy initialisation ──────────────────────────────────────────────────
+
+  /**
+   * Create all manager instances and attach runtime hooks.
+   * Safe to call multiple times — acts only on the first call.
+   */
+  _ensureInit() {
+    if (this._initialized) return;
+    this._initialized = true;
+
+    this._registry = new PrismRegistry();
+    this._snapshots = new SnapshotManager();
+    this._watchers = new WatcherManager();
+    this._metadata = new MetadataStore();
+    this._opfs = new OpfsBackend();
+    this._permStores = new Map();
+
+    // Kick off OPFS initialisation in the background.
+    this._opfs.init().then(available => {
+      if (available) {
+        // Load all persistent prisms from OPFS into the in-memory registry.
+        for (const name of this._registry.list()) {
+          if (this._registry.typeOf(name) === PRISM_TYPE.PRISM) {
+            this._opfs.loadPrism(name).then(files => {
+              if (files) {
+                for (const [path, content] of files) {
+                  this._registry.writeFile(name, path, content);
+                }
+              }
+            });
+          }
+        }
+      }
+    });
+
+    // Attach TurboWarp/Scratch runtime hooks for green-flag / project-stop.
+    if (this._runtime) {
+      const cleanup = () => this._registry.cleanupTemporary();
+      this._runtime.on('PROJECT_RUN_START', cleanup);
+      this._runtime.on('PROJECT_STOP_ALL', cleanup);
+    }
+  }
+
+  // ─── Internal helpers ─────────────────────────────────────────────────────
+
+  /** @param {...any} parts */
+  _dbg(...parts) {
+    if (this._debugLogging) console.log('PrismFS:', ...parts);
+  }
+
+  /**
+   * Resolve a URI string to `{ prism, filePath }`, or an error string.
+   *
+   * @param {string} uri
+   * @returns {{ prism: string, filePath: string } | string}
+   */
+  _resolveUri(uri) {
+    const parsed = parseUri(uri);
+    if (!parsed) return Errors.invalidUri(`"${uri}" is not a valid PrismFS URI.`);
+    if (!this._registry.isMounted(parsed.prism)) {
+      return Errors.notFound(`Prism "${parsed.prism}" is not mounted.`);
+    }
+    return { prism: parsed.prism, filePath: normalisePath(parsed.filePath) };
+  }
+
+  /**
+   * Get (or lazily create) the PermissionStore for a prism.
+   *
+   * @param {string} prismName
+   * @returns {PermissionStore}
+   */
+  _getPermStore(prismName) {
+    if (!this._permStores.has(prismName)) {
+      this._permStores.set(prismName, new PermissionStore());
+    }
+    return this._permStores.get(prismName);
+  }
+
+  /**
+   * Notify watchers that `uri` was written.  Skips UUIDs that are in the
+   * suppression window (i.e. their own script triggered this write — prevents
+   * infinite loops).
+   *
+   * @param {string} uri
+   */
+  _notifyWatchers(uri) {
+    const matches = this._watchers.getMatching(uri);
+    for (const w of matches) {
+      this._dbg(`watcher ${w.uuid} triggered by write to ${uri}`);
+      if (!this._suppressedWatchers.has(w.uuid)) {
+        this._pendingWatchers.add(w.uuid);
+      }
+    }
+  }
+
+  /**
+   * Return the calling sprite name, or "unknown" if unavailable.
+   *
+   * @returns {string}
+   */
+  _callerSpriteName() {
+    try {
+      return this._runtime?.getEditingTarget?.()?.sprite?.name ?? 'unknown';
+    } catch {
+      return 'unknown';
+    }
+  }
+
+  /**
+   * Encode a string to base64 in a UTF-8-safe way.
+   *
+   * @param {string} str
+   * @returns {string}
+   */
+  _toBase64(str) {
+    const bytes = new TextEncoder().encode(str);
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary);
+  }
+
+  // ─── getInfo() ────────────────────────────────────────────────────────────
 
   getInfo() {
     return {
@@ -186,6 +287,16 @@ class PrismFSExtension {
           },
         },
         {
+          opcode: 'writeFileAs',
+          blockType: 'command',
+          text: Scratch.translate('write [CONTENT] as [FORMAT] to [URI]'),
+          arguments: {
+            CONTENT: { type: 'string', defaultValue: '' },
+            FORMAT: { type: 'string', menu: 'readFormat', defaultValue: 'base64' },
+            URI: { type: 'string', defaultValue: 'fs://hello.txt' },
+          },
+        },
+        {
           opcode: 'deleteFile',
           blockType: 'command',
           text: Scratch.translate('delete file [URI]'),
@@ -196,6 +307,15 @@ class PrismFSExtension {
           blockType: 'Boolean',
           text: Scratch.translate('file [URI] exists?'),
           arguments: { URI: { type: 'string', defaultValue: 'fs://hello.txt' } },
+        },
+        {
+          opcode: 'downloadFile',
+          blockType: 'command',
+          text: Scratch.translate('download [URI] as [FILENAME]'),
+          arguments: {
+            URI: { type: 'string', defaultValue: 'fs://hello.txt' },
+            FILENAME: { type: 'string', defaultValue: 'hello.txt' },
+          },
         },
         '---',
         // ── Directory operations ─────────────────────────────────────────────
@@ -349,64 +469,82 @@ class PrismFSExtension {
   // ─── Block implementations: prism management ─────────────────────────────
 
   mountPrism(args) {
-    const result = registry.mount(String(args.NAME), String(args.TYPE));
-    if (result) dbg(`mountPrism error: ${result}`);
+    this._ensureInit();
+    const result = this._registry.mount(String(args.NAME), String(args.TYPE));
+    if (result) this._dbg(`mountPrism error: ${result}`);
+    // Load OPFS data for persistent prisms in the background.
+    const name = String(args.NAME).toLowerCase();
+    if (!result && String(args.TYPE) === PRISM_TYPE.PRISM && this._opfs.isAvailable()) {
+      this._opfs.loadPrism(name).then(files => {
+        if (files) {
+          for (const [path, content] of files) {
+            this._registry.writeFile(name, path, content);
+          }
+        }
+      });
+    }
     return result;
   }
 
   unmountPrism(args) {
-    const result = registry.unmount(String(args.NAME));
-    if (result) dbg(`unmountPrism error: ${result}`);
+    this._ensureInit();
+    const result = this._registry.unmount(String(args.NAME));
+    if (result) this._dbg(`unmountPrism error: ${result}`);
   }
 
   isPrismMounted(args) {
-    return registry.isMounted(String(args.NAME));
+    this._ensureInit();
+    return this._registry.isMounted(String(args.NAME));
   }
 
   prismType(args) {
-    return registry.typeOf(String(args.NAME));
+    this._ensureInit();
+    return this._registry.typeOf(String(args.NAME));
   }
 
   listPrisms() {
-    return JSON.stringify(registry.list());
+    this._ensureInit();
+    return JSON.stringify(this._registry.list());
   }
 
   // ─── Block implementations: file operations ───────────────────────────────
 
   readFile(args) {
-    const resolved = resolveUri(String(args.URI));
+    this._ensureInit();
+    const resolved = this._resolveUri(String(args.URI));
     if (isError(resolved)) return resolved;
 
     const { prism, filePath } = resolved;
-    if (!getPermStore(prism).has(filePath, PERMISSION.READ)) {
+    if (!this._getPermStore(prism).has(filePath, PERMISSION.READ)) {
       return Errors.permission(`No read permission on "${args.URI}".`);
     }
-    return registry.readFile(prism, filePath);
+    return this._registry.readFile(prism, filePath);
   }
 
   readFileAs(args) {
-    const resolved = resolveUri(String(args.URI));
+    this._ensureInit();
+    const resolved = this._resolveUri(String(args.URI));
     if (isError(resolved)) return resolved;
 
     const { prism, filePath } = resolved;
-    if (!getPermStore(prism).has(filePath, PERMISSION.READ)) {
+    if (!this._getPermStore(prism).has(filePath, PERMISSION.READ)) {
       return Errors.permission(`No read permission on "${args.URI}".`);
     }
 
-    const content = registry.readFile(prism, filePath);
+    const content = this._registry.readFile(prism, filePath);
     if (isError(content)) return content;
 
     const format = String(args.FORMAT);
     if (format === 'base64') {
       try {
-        return btoa(unescape(encodeURIComponent(content)));
+        return this._toBase64(content);
       } catch {
         return Errors.invalid('Failed to encode content as base64.');
       }
     }
     if (format === 'datauri') {
       try {
-        return `data:text/plain;base64,${btoa(unescape(encodeURIComponent(content)))}`;
+        return `data:text/plain;base64,${this._toBase64(content)}`;
       } catch {
         return Errors.invalid('Failed to encode content as data: URI.');
       }
@@ -415,71 +553,170 @@ class PrismFSExtension {
   }
 
   writeFile(args) {
-    const resolved = resolveUri(String(args.URI));
+    this._ensureInit();
+    const resolved = this._resolveUri(String(args.URI));
     if (isError(resolved)) return;
 
     const { prism, filePath } = resolved;
-    if (!getPermStore(prism).has(filePath, PERMISSION.WRITE)) {
-      dbg(`writeFile: no write permission on "${args.URI}"`);
+    if (!this._getPermStore(prism).has(filePath, PERMISSION.WRITE)) {
+      this._dbg(`writeFile: no write permission on "${args.URI}"`);
       return;
     }
 
-    const result = registry.writeFile(prism, filePath, String(args.CONTENT));
-    if (result) { dbg(`writeFile error: ${result}`); return; }
+    const isNew = !this._registry.fileExists(prism, filePath);
+    const result = this._registry.writeFile(prism, filePath, String(args.CONTENT));
+    if (result) { this._dbg(`writeFile error: ${result}`); return; }
 
-    metadataMgr.touch(`${prism}://${filePath}`, this._callerSpriteName());
-    notifyWatchers(`${prism}://${filePath}`);
+    const uri = `${prism}://${filePath}`;
+    const sprite = this._callerSpriteName();
+    if (isNew) {
+      this._metadata.initBuiltin(uri, sprite);
+    } else {
+      this._metadata.touch(uri, sprite);
+    }
+
+    // Persist to OPFS asynchronously (fire-and-forget for persistent prisms).
+    if (this._registry.typeOf(prism) === PRISM_TYPE.PRISM && this._opfs.isAvailable()) {
+      this._opfs.writeFile(prism, filePath, String(args.CONTENT));
+    }
+
+    this._notifyWatchers(uri);
+  }
+
+  /**
+   * Write content that is already encoded (base64 or data: URI) and decode it
+   * before storing.
+   */
+  writeFileAs(args) {
+    this._ensureInit();
+    const resolved = this._resolveUri(String(args.URI));
+    if (isError(resolved)) return;
+
+    const { prism, filePath } = resolved;
+    if (!this._getPermStore(prism).has(filePath, PERMISSION.WRITE)) {
+      this._dbg(`writeFileAs: no write permission on "${args.URI}"`);
+      return;
+    }
+
+    const format = String(args.FORMAT);
+    let rawContent = String(args.CONTENT);
+
+    if (format === 'base64') {
+      try {
+        const bytes = Uint8Array.from(atob(rawContent), c => c.charCodeAt(0));
+        rawContent = new TextDecoder().decode(bytes);
+      } catch {
+        this._dbg(`writeFileAs: invalid base64 data`);
+        return;
+      }
+    } else if (format === 'datauri') {
+      try {
+        const b64 = rawContent.replace(/^data:[^;]+;base64,/, '');
+        const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        rawContent = new TextDecoder().decode(bytes);
+      } catch {
+        this._dbg(`writeFileAs: invalid data: URI`);
+        return;
+      }
+    }
+
+    this.writeFile({ URI: args.URI, CONTENT: rawContent });
   }
 
   deleteFile(args) {
-    const resolved = resolveUri(String(args.URI));
+    this._ensureInit();
+    const resolved = this._resolveUri(String(args.URI));
     if (isError(resolved)) return;
 
     const { prism, filePath } = resolved;
-    if (!getPermStore(prism).has(filePath, PERMISSION.MANAGE)) {
-      dbg(`deleteFile: no manage permission on "${args.URI}"`);
+    if (!this._getPermStore(prism).has(filePath, PERMISSION.MANAGE)) {
+      this._dbg(`deleteFile: no manage permission on "${args.URI}"`);
       return;
     }
 
-    const result = registry.deleteFile(prism, filePath);
-    if (result) dbg(`deleteFile error: ${result}`);
+    const result = this._registry.deleteFile(prism, filePath);
+    if (result) { this._dbg(`deleteFile error: ${result}`); return; }
+
+    // Remove from OPFS asynchronously.
+    if (this._registry.typeOf(prism) === PRISM_TYPE.PRISM && this._opfs.isAvailable()) {
+      this._opfs.deleteFile(prism, filePath);
+    }
   }
 
   fileExists(args) {
-    const resolved = resolveUri(String(args.URI));
+    this._ensureInit();
+    const resolved = this._resolveUri(String(args.URI));
     if (isError(resolved)) return false;
 
     const { prism, filePath } = resolved;
-    if (!getPermStore(prism).has(filePath, PERMISSION.SEE)) return false;
-    return registry.fileExists(prism, filePath);
+    if (!this._getPermStore(prism).has(filePath, PERMISSION.SEE)) return false;
+    return this._registry.fileExists(prism, filePath);
+  }
+
+  /**
+   * Trigger a browser download of a file's text content.
+   * No-op when running outside a browser context (e.g., in tests).
+   */
+  downloadFile(args) {
+    this._ensureInit();
+    const resolved = this._resolveUri(String(args.URI));
+    if (isError(resolved)) return;
+
+    const { prism, filePath } = resolved;
+    if (!this._getPermStore(prism).has(filePath, PERMISSION.READ)) {
+      this._dbg(`downloadFile: no read permission on "${args.URI}"`);
+      return;
+    }
+
+    const content = this._registry.readFile(prism, filePath);
+    if (isError(content)) { this._dbg(`downloadFile error: ${content}`); return; }
+
+    // Browser-only: trigger file download.
+    if (typeof document !== 'undefined') {
+      try {
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = String(args.FILENAME) || filePath.split('/').pop() || 'file.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        this._dbg(`downloadFile: browser download failed: ${e.message}`);
+      }
+    }
   }
 
   // ─── Block implementations: directory operations ──────────────────────────
 
   listDirectory(args) {
-    const resolved = resolveUri(String(args.URI));
+    this._ensureInit();
+    const resolved = this._resolveUri(String(args.URI));
     if (isError(resolved)) return resolved;
 
     const { prism, filePath } = resolved;
-    if (!getPermStore(prism).has(filePath || '', PERMISSION.SEE)) {
+    if (!this._getPermStore(prism).has(filePath || '', PERMISSION.SEE)) {
       return Errors.permission(`No see permission on "${args.URI}".`);
     }
 
-    const result = registry.listFiles(prism, filePath || undefined);
+    const result = this._registry.listFiles(prism, filePath || undefined);
     if (isError(result)) return result;
     return JSON.stringify(result);
   }
 
   searchFiles(args) {
-    const resolved = resolveUri(String(args.URI));
+    this._ensureInit();
+    const resolved = this._resolveUri(String(args.URI));
     if (isError(resolved)) return resolved;
 
     const { prism, filePath } = resolved;
-    if (!getPermStore(prism).has(filePath || '', PERMISSION.SEE)) {
+    if (!this._getPermStore(prism).has(filePath || '', PERMISSION.SEE)) {
       return Errors.permission(`No see permission on "${args.URI}".`);
     }
 
-    const all = registry.listFiles(prism, filePath || undefined);
+    const all = this._registry.listFiles(prism, filePath || undefined);
     if (isError(all)) return all;
 
     const pattern = String(args.PATTERN);
@@ -490,13 +727,14 @@ class PrismFSExtension {
   // ─── Block implementations: permissions ──────────────────────────────────
 
   setPermission(args) {
-    const resolved = resolveUri(String(args.URI));
+    this._ensureInit();
+    const resolved = this._resolveUri(String(args.URI));
     if (isError(resolved)) return;
 
     const { prism, filePath } = resolved;
-    const store = getPermStore(prism);
+    const store = this._getPermStore(prism);
     if (!store.has(filePath || '', PERMISSION.MANAGE)) {
-      dbg(`setPermission: no manage permission on "${args.URI}"`);
+      this._dbg(`setPermission: no manage permission on "${args.URI}"`);
       return;
     }
 
@@ -504,46 +742,53 @@ class PrismFSExtension {
     const current = new Set(store.resolve(filePath || ''));
     const enable = args.VALUE === true || args.VALUE === 'true';
     if (enable) { current.add(perm); } else { current.delete(perm); }
-    store.set(filePath || '', current);
+
+    const err = store.set(filePath || '', current);
+    if (err) this._dbg(`setPermission error: ${err}`);
   }
 
   hasPermission(args) {
-    const resolved = resolveUri(String(args.URI));
+    this._ensureInit();
+    const resolved = this._resolveUri(String(args.URI));
     if (isError(resolved)) return false;
 
     const { prism, filePath } = resolved;
-    return getPermStore(prism).has(filePath || '', String(args.PERM));
+    return this._getPermStore(prism).has(filePath || '', String(args.PERM));
   }
 
   // ─── Block implementations: snapshots ────────────────────────────────────
 
   createSnapshot(args) {
+    this._ensureInit();
     const prismName = String(args.PRISM).toLowerCase();
-    if (!registry.isMounted(prismName)) {
-      dbg(`createSnapshot: prism "${prismName}" not mounted`);
+    if (!this._registry.isMounted(prismName)) {
+      this._dbg(`createSnapshot: prism "${prismName}" not mounted`);
       return;
     }
 
-    const filesCopy = registry.snapshotFiles(prismName);
-    if (isError(filesCopy)) { dbg(`createSnapshot error: ${filesCopy}`); return; }
+    const filesCopy = this._registry.snapshotFiles(prismName);
+    if (isError(filesCopy)) { this._dbg(`createSnapshot error: ${filesCopy}`); return; }
 
-    const result = snapshotMgr.create(prismName, String(args.NAME), filesCopy);
-    if (result) dbg(`createSnapshot error: ${result}`);
+    const result = this._snapshots.create(prismName, String(args.NAME), filesCopy);
+    if (result) this._dbg(`createSnapshot error: ${result}`);
   }
 
   deleteSnapshot(args) {
-    const result = snapshotMgr.delete(String(args.PRISM).toLowerCase(), String(args.NAME));
-    if (result) dbg(`deleteSnapshot error: ${result}`);
+    this._ensureInit();
+    const result = this._snapshots.delete(String(args.PRISM).toLowerCase(), String(args.NAME));
+    if (result) this._dbg(`deleteSnapshot error: ${result}`);
   }
 
   listSnapshots(args) {
-    return JSON.stringify(snapshotMgr.list(String(args.PRISM).toLowerCase()));
+    this._ensureInit();
+    return JSON.stringify(this._snapshots.list(String(args.PRISM).toLowerCase()));
   }
 
   snapshotDiff(args) {
+    this._ensureInit();
     const prism = String(args.PRISM).toLowerCase();
-    const s1 = snapshotMgr.get(prism, String(args.S1));
-    const s2 = snapshotMgr.get(prism, String(args.S2));
+    const s1 = this._snapshots.get(prism, String(args.S1));
+    const s2 = this._snapshots.get(prism, String(args.S2));
 
     if (!s1) return Errors.notFound(`Snapshot "${args.S1}" not found.`);
     if (!s2) return Errors.notFound(`Snapshot "${args.S2}" not found.`);
@@ -553,12 +798,13 @@ class PrismFSExtension {
   // ─── Block implementations: backup & restore ─────────────────────────────
 
   backupPrism(args) {
+    this._ensureInit();
     const prismName = String(args.NAME).toLowerCase();
-    if (!registry.isMounted(prismName)) {
+    if (!this._registry.isMounted(prismName)) {
       return Errors.notFound(`Prism "${args.NAME}" is not mounted.`);
     }
 
-    const entry = registry.get(prismName);
+    const entry = this._registry.get(prismName);
     return JSON.stringify({
       name: prismName,
       type: entry.type,
@@ -573,19 +819,28 @@ class PrismFSExtension {
   }
 
   restorePrism(args) {
+    this._ensureInit();
     let backupObj;
-    try { backupObj = JSON.parse(String(args.DATA)); } catch { dbg('restorePrism: invalid JSON'); return; }
-    if (!backupObj || typeof backupObj.name !== 'string') { dbg('restorePrism: missing name'); return; }
+    try { backupObj = JSON.parse(String(args.DATA)); }
+    catch { this._dbg('restorePrism: invalid JSON'); return; }
+    if (!backupObj || typeof backupObj.name !== 'string') {
+      this._dbg('restorePrism: missing name');
+      return;
+    }
 
     const prismName = backupObj.name.toLowerCase();
-    if (registry.isMounted(prismName)) registry.unmount(prismName);
+    if (this._registry.isMounted(prismName)) this._registry.unmount(prismName);
 
-    const mountResult = registry.mount(prismName, backupObj.type ?? PRISM_TYPE.PRISM);
-    if (mountResult) { dbg(`restorePrism mount error: ${mountResult}`); return; }
+    const mountResult = this._registry.mount(prismName, backupObj.type ?? PRISM_TYPE.PRISM);
+    if (mountResult) { this._dbg(`restorePrism mount error: ${mountResult}`); return; }
 
     if (backupObj.files && typeof backupObj.files === 'object') {
       for (const [path, f] of Object.entries(backupObj.files)) {
-        registry.writeFile(prismName, path, f.content ?? '');
+        this._registry.writeFile(prismName, path, f.content ?? '');
+        if (String(backupObj.type ?? PRISM_TYPE.PRISM) === PRISM_TYPE.PRISM &&
+            this._opfs.isAvailable()) {
+          this._opfs.writeFile(prismName, path, f.content ?? '');
+        }
       }
     }
   }
@@ -593,54 +848,71 @@ class PrismFSExtension {
   // ─── Block implementations: file watching ────────────────────────────────
 
   watchPath(args) {
-    return watcherMgr.register(String(args.PATTERN), this._callerSpriteName());
+    this._ensureInit();
+    const result = this._watchers.register(String(args.PATTERN), this._callerSpriteName());
+    // If quota was reached, the error string is returned to the caller AND
+    // logged so the developer can diagnose it via debug logging.
+    if (isError(result)) this._dbg(`watchPath: quota or error: ${result}`);
+    return result;
   }
 
   unwatchPath(args) {
-    const result = watcherMgr.unregister(String(args.UUID));
-    if (result) dbg(`unwatchPath error: ${result}`);
+    this._ensureInit();
+    const result = this._watchers.unregister(String(args.UUID));
+    if (result) this._dbg(`unwatchPath error: ${result}`);
   }
 
+  /**
+   * Hat block: fires once per write event for the registered watcher UUID.
+   *
+   * Uses an edge-triggered pending-fires set so the hat fires exactly once per
+   * write event rather than every tick.  While the hat is "active" the UUID is
+   * added to `_suppressedWatchers` to prevent the watcher's own script from
+   * recursively re-triggering itself.
+   */
   onFileChanged(args) {
-    return watcherMgr.list().some(w => w.uuid === String(args.UUID));
+    this._ensureInit();
+    const uuid = String(args.UUID);
+    if (this._pendingWatchers.has(uuid)) {
+      this._pendingWatchers.delete(uuid);
+      // Suppress re-entrancy: if the script triggered by this hat writes to a
+      // watched file, that watcher should not fire again immediately.
+      this._suppressedWatchers.add(uuid);
+      queueMicrotask(() => this._suppressedWatchers.delete(uuid));
+      return true;
+    }
+    return false;
   }
 
   // ─── Block implementations: metadata ─────────────────────────────────────
 
   getMetadata(args) {
-    const resolved = resolveUri(String(args.URI));
+    this._ensureInit();
+    const resolved = this._resolveUri(String(args.URI));
     if (isError(resolved)) return resolved;
-    return metadataMgr.get(String(args.URI), String(args.TAG));
+    return this._metadata.get(String(args.URI), String(args.TAG));
   }
 
   setMetadata(args) {
-    const resolved = resolveUri(String(args.URI));
+    this._ensureInit();
+    const resolved = this._resolveUri(String(args.URI));
     if (isError(resolved)) return;
-    const result = metadataMgr.set(String(args.URI), String(args.TAG), String(args.VALUE));
-    if (result) dbg(`setMetadata error: ${result}`);
+    const result = this._metadata.set(String(args.URI), String(args.TAG), String(args.VALUE));
+    if (result) this._dbg(`setMetadata error: ${result}`);
   }
 
   getAllMetadata(args) {
-    const resolved = resolveUri(String(args.URI));
+    this._ensureInit();
+    const resolved = this._resolveUri(String(args.URI));
     if (isError(resolved)) return resolved;
-    return JSON.stringify(metadataMgr.getAll(String(args.URI)));
+    return JSON.stringify(this._metadata.getAll(String(args.URI)));
   }
 
   // ─── Block implementations: debug ────────────────────────────────────────
 
   setDebugLogging(args) {
-    debugLogging = args.VALUE === true || args.VALUE === 'true';
-  }
-
-  // ─── Private helpers ──────────────────────────────────────────────────────
-
-  _callerSpriteName() {
-    try {
-      return this._runtime?.getEditingTarget?.()?.sprite?.name ?? 'unknown';
-    } catch {
-      return 'unknown';
-    }
+    this._debugLogging = args.VALUE === true || args.VALUE === 'true';
   }
 }
 
-Scratch.extensions.register(new PrismFSExtension());
+Scratch.extensions.register(new PrismFSExtension(Scratch.vm?.runtime));

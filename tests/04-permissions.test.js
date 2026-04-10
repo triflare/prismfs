@@ -79,3 +79,22 @@ describe('PermissionStore — reset()', () => {
     assert.ok(store.has('restricted', PERMISSION.WRITE));
   });
 });
+
+describe('PermissionStore — defensive copy', () => {
+  it('resolve() returns a new Set each time', () => {
+    const store = new PermissionStore();
+    store.set('path', [PERMISSION.SEE, PERMISSION.READ]);
+    const s1 = store.resolve('path');
+    const s2 = store.resolve('path');
+    assert.notStrictEqual(s1, s2, 'resolve() should return a fresh Set each call');
+  });
+
+  it('mutating the returned Set does not affect the store', () => {
+    const store = new PermissionStore();
+    store.set('immpath', [PERMISSION.SEE]);
+    const perms = store.resolve('immpath');
+    perms.add(PERMISSION.WRITE); // mutate the returned copy
+    // The store's internal state should be unchanged.
+    assert.equal(store.has('immpath', PERMISSION.WRITE), false);
+  });
+});

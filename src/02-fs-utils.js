@@ -56,11 +56,14 @@ export function formatError(type, message) {
  * Reporters return the error string instead of throwing so callers can
  * detect failure without a try/catch.
  *
+ * Uses a tight prefix check (`ERR` followed by at least one uppercase letter)
+ * to avoid false positives where file content coincidentally starts with "ERR".
+ *
  * @param {string} value
  * @returns {boolean}
  */
 export function isError(value) {
-  return typeof value === 'string' && value.startsWith('ERR');
+  return typeof value === 'string' && /^ERR[A-Z]/.test(value);
 }
 
 export const Errors = Object.freeze({

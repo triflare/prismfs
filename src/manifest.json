@@ -4,6 +4,6 @@
   "version": "0.1.0",
   "description": "An OPFS-powered, volume-based file system for TurboWarp projects.",
   "author": "triflare",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "GPL-3.0-only",
   "url": "https://github.com/triflare/prismfs"
 }

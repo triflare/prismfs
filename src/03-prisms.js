@@ -12,6 +12,8 @@ import {
   PRISM_TYPE,
   RESERVED_PRISMS,
   MAX_PRISMS,
+  MAX_FILES_PER_PRISM,
+  MAX_FILE_SIZE_BYTES,
   Errors,
 } from './02-fs-utils.js';
 
@@ -160,6 +162,26 @@ export class PrismRegistry {
     if (!entry) return Errors.notFound(`Prism "${prismName}" is not mounted.`);
     if (entry.type === PRISM_TYPE.IMMUTABLE) {
       return Errors.readOnly(`Prism "${prismName}" is immutable.`);
+    }
+
+    // Enforce per-prism file count limit (new files only).
+    const isNew = !entry.files.has(filePath);
+    if (isNew && entry.files.size >= MAX_FILES_PER_PRISM) {
+      return Errors.limit(
+        `Prism "${prismName}" has reached the maximum file count (${MAX_FILES_PER_PRISM}).`
+      );
+    }
+
+    // Enforce maximum file size.
+    // TextEncoder.encode gives the UTF-8 byte length, but avoid allocating the
+    // full buffer for large strings by using a rough byte-length estimate first.
+    const roughBytes = content.length * 4; // worst case: 4 bytes per UTF-16 code unit
+    if (roughBytes > MAX_FILE_SIZE_BYTES) {
+      // Only do the precise (slower) check if the rough estimate exceeds the limit.
+      const exactBytes = new TextEncoder().encode(content).byteLength;
+      if (exactBytes > MAX_FILE_SIZE_BYTES) {
+        return Errors.limit(`File exceeds the maximum allowed size (${MAX_FILE_SIZE_BYTES} bytes).`);
+      }
     }
 
     const now = Date.now();

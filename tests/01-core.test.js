@@ -55,7 +55,7 @@ describe('PrismFSExtension — getInfo()', () => {
 
     const expected = [
       'mountPrism', 'unmountPrism', 'isPrismMounted', 'prismType', 'listPrisms',
-      'readFile', 'readFileAs', 'writeFile', 'deleteFile', 'fileExists',
+      'readFile', 'readFileAs', 'writeFile', 'writeFileAs', 'deleteFile', 'fileExists', 'downloadFile',
       'listDirectory', 'searchFiles',
       'setPermission', 'hasPermission',
       'createSnapshot', 'deleteSnapshot', 'listSnapshots', 'snapshotDiff',
@@ -291,5 +291,73 @@ describe('PrismFSExtension — metadata', () => {
     extension.setMetadata({ URI: 'fs://allmetadata.txt', TAG: 'genre', VALUE: 'fiction' });
     const obj = JSON.parse(extension.getAllMetadata({ URI: 'fs://allmetadata.txt' }));
     assert.equal(obj.genre, 'fiction');
+  });
+
+  it('createdAt is set automatically on first write', () => {
+    extension.writeFile({ URI: 'fs://newfile-meta.txt', CONTENT: 'v1' });
+    const created = extension.getMetadata({ URI: 'fs://newfile-meta.txt', TAG: 'createdAt' });
+    assert.ok(created.length > 0, 'createdAt should be populated');
+  });
+
+  it('createdAt is preserved on subsequent writes', () => {
+    extension.writeFile({ URI: 'fs://preserve-meta.txt', CONTENT: 'v1' });
+    const created1 = extension.getMetadata({ URI: 'fs://preserve-meta.txt', TAG: 'createdAt' });
+    extension.writeFile({ URI: 'fs://preserve-meta.txt', CONTENT: 'v2' });
+    const created2 = extension.getMetadata({ URI: 'fs://preserve-meta.txt', TAG: 'createdAt' });
+    assert.equal(created1, created2, 'createdAt should not change on update');
+  });
+});
+
+// ─── writeFileAs ──────────────────────────────────────────────────────────────
+
+describe('PrismFSExtension — writeFileAs', () => {
+  it('decodes base64 content before writing', () => {
+    // "hello" in base64
+    extension.writeFileAs({ URI: 'fs://b64.txt', CONTENT: 'aGVsbG8=', FORMAT: 'base64' });
+    assert.equal(extension.readFile({ URI: 'fs://b64.txt' }), 'hello');
+  });
+
+  it('decodes data: URI content before writing', () => {
+    // "hi" in data URI
+    extension.writeFileAs({
+      URI: 'fs://datauri.txt',
+      CONTENT: 'data:text/plain;base64,aGk=',
+      FORMAT: 'datauri',
+    });
+    assert.equal(extension.readFile({ URI: 'fs://datauri.txt' }), 'hi');
+  });
+
+  it('writes text content unchanged when format is text', () => {
+    extension.writeFileAs({ URI: 'fs://rawtext.txt', CONTENT: 'plain', FORMAT: 'text' });
+    assert.equal(extension.readFile({ URI: 'fs://rawtext.txt' }), 'plain');
+  });
+});
+
+// ─── onFileChanged hat block (edge-triggered) ─────────────────────────────────
+
+describe('PrismFSExtension — onFileChanged hat', () => {
+  it('returns false when nothing has been written', () => {
+    const uuid = extension.watchPath({ PATTERN: 'fs://hat-test.txt' });
+    assert.equal(extension.onFileChanged({ UUID: uuid }), false);
+  });
+
+  it('returns true once after a write, then false on the next poll', () => {
+    const uuid = extension.watchPath({ PATTERN: 'fs://hat-fire.txt' });
+    extension.writeFile({ URI: 'fs://hat-fire.txt', CONTENT: 'data' });
+    assert.equal(extension.onFileChanged({ UUID: uuid }), true, 'should fire after write');
+    assert.equal(extension.onFileChanged({ UUID: uuid }), false, 'should not fire again');
+  });
+
+  it('fires once per write event', async () => {
+    const uuid = extension.watchPath({ PATTERN: 'fs://hat-multi.txt' });
+    extension.writeFile({ URI: 'fs://hat-multi.txt', CONTENT: '1' });
+    assert.equal(extension.onFileChanged({ UUID: uuid }), true);
+    assert.equal(extension.onFileChanged({ UUID: uuid }), false);
+    // Allow the queueMicrotask suppression-window cleanup to run before
+    // making the second write so the watcher isn't suppressed.
+    await new Promise(resolve => setImmediate(resolve));
+    extension.writeFile({ URI: 'fs://hat-multi.txt', CONTENT: '2' });
+    assert.equal(extension.onFileChanged({ UUID: uuid }), true, 'should fire again after second write');
+    assert.equal(extension.onFileChanged({ UUID: uuid }), false);
   });
 });

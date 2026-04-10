@@ -44,23 +44,24 @@ export class PermissionStore {
 
   /**
    * Return the effective permissions for a path by walking up the tree.
+   * Always returns a new Set so callers cannot mutate internal state.
    *
    * @param {string} path
-   * @returns {ReadonlySet<string>}
+   * @returns {Set<string>}
    */
   resolve(path) {
     // Exact match first.
-    if (this._map.has(path)) return this._map.get(path);
+    if (this._map.has(path)) return new Set(this._map.get(path));
 
     // Walk toward the prism root.
     const segments = path.split('/').filter(Boolean);
     for (let i = segments.length - 1; i >= 0; i--) {
       const ancestor = segments.slice(0, i).join('/');
-      if (this._map.has(ancestor)) return this._map.get(ancestor);
+      if (this._map.has(ancestor)) return new Set(this._map.get(ancestor));
     }
 
     // Prism-root entry (empty string key).
-    if (this._map.has('')) return this._map.get('');
+    if (this._map.has('')) return new Set(this._map.get(''));
 
     // Default: all permissions granted.
     return new Set(ALL_PERMISSIONS);
