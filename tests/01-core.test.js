@@ -39,9 +39,9 @@ describe('PrismFSExtension — getInfo()', () => {
 
   it('uses light-red accent colors', () => {
     const info = extension.getInfo();
-    assert.equal(info.color1, '#FF4444');
-    assert.equal(info.color2, '#CC2222');
-    assert.equal(info.color3, '#AA0000');
+    assert.equal(info.color1, '#44a2ff');
+    assert.equal(info.color2, '#2177cd');
+    assert.equal(info.color3, '#1c5fa2');
   });
 
   it('exposes a non-empty blocks array', () => {
