@@ -180,7 +180,9 @@ export class PrismRegistry {
       // Only do the precise (slower) check if the rough estimate exceeds the limit.
       const exactBytes = new TextEncoder().encode(content).byteLength;
       if (exactBytes > MAX_FILE_SIZE_BYTES) {
-        return Errors.limit(`File exceeds the maximum allowed size (${MAX_FILE_SIZE_BYTES} bytes).`);
+        return Errors.limit(
+          `File exceeds the maximum allowed size (${MAX_FILE_SIZE_BYTES} bytes).`
+        );
       }
     }
 

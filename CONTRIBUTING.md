@@ -1,6 +1,6 @@
 # Contributing to PrismFS
 
-Thank you for your interest in contributing!  PrismFS is a TurboWarp extension
+Thank you for your interest in contributing! PrismFS is a TurboWarp extension
 built on top of [Mint](./docs/mint-tooling/) — Triflare's modular extension
 development platform.
 
@@ -54,20 +54,20 @@ npm run fullstack
 
 ## Error Conventions
 
-PrismFS errors always follow the structure `ERR<TYPE>: <message>`.  Reporter
+PrismFS errors always follow the structure `ERR<TYPE>: <message>`. Reporter
 blocks return this string instead of throwing so callers can detect failures
-without a try/catch.  Possible error types:
+without a try/catch. Possible error types:
 
-| Type          | Meaning                                    |
-|---------------|--------------------------------------------|
-| `NOTFOUND`    | Prism, file, or snapshot not found         |
-| `PERMISSION`  | Operation not permitted by permission set  |
-| `INVALIDURI`  | Malformed PrismFS URI                      |
-| `RESERVED`    | Attempt to mount/unmount a reserved prism  |
-| `LIMIT`       | A quota (prisms, snapshots, watchers, …)   |
-| `INVALID`     | Bad argument value                         |
-| `READONLY`    | Write on an immutable prism                |
-| `EXISTS`      | Name already taken                         |
+| Type         | Meaning                                   |
+| ------------ | ----------------------------------------- |
+| `NOTFOUND`   | Prism, file, or snapshot not found        |
+| `PERMISSION` | Operation not permitted by permission set |
+| `INVALIDURI` | Malformed PrismFS URI                     |
+| `RESERVED`   | Attempt to mount/unmount a reserved prism |
+| `LIMIT`      | A quota (prisms, snapshots, watchers, …)  |
+| `INVALID`    | Bad argument value                        |
+| `READONLY`   | Write on an immutable prism               |
+| `EXISTS`     | Name already taken                        |
 
 A file, directory, or prism **name must not start with the three uppercase
 letters `ERR`**, because PrismFS uses that prefix exclusively for error strings.
@@ -99,7 +99,9 @@ Install the Scratch/mint mock before importing `01-core.js`:
 import { installScratchMock } from './helpers/mock-scratch.js';
 const { mock } = installScratchMock();
 let extension;
-mock.extensions.register = instance => { extension = instance; };
+mock.extensions.register = instance => {
+  extension = instance;
+};
 await import('../src/01-core.js');
 ```
 
@@ -109,7 +111,7 @@ await import('../src/01-core.js');
 - Keep block implementations thin — delegate business logic to the helper modules.
 - Follow the existing code style (Prettier + ESLint configs are committed).
 - AI-generated code is welcome, but it must meet or exceed the human-authored
-  standard.  See [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) for details.
+  standard. See [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) for details.
 
 ## Submitting a Pull Request
 

@@ -12,7 +12,9 @@ import { installScratchMock } from './helpers/mock-scratch.js';
 
 const { mock } = installScratchMock();
 let extension;
-mock.extensions.register = instance => { extension = instance; };
+mock.extensions.register = instance => {
+  extension = instance;
+};
 
 await import('../src/01-core.js');
 
@@ -54,14 +56,34 @@ describe('PrismFSExtension — getInfo()', () => {
       .map(b => b.opcode);
 
     const expected = [
-      'mountPrism', 'unmountPrism', 'isPrismMounted', 'prismType', 'listPrisms',
-      'readFile', 'readFileAs', 'writeFile', 'writeFileAs', 'deleteFile', 'fileExists', 'downloadFile',
-      'listDirectory', 'searchFiles',
-      'setPermission', 'hasPermission',
-      'createSnapshot', 'deleteSnapshot', 'listSnapshots', 'snapshotDiff',
-      'backupPrism', 'restorePrism',
-      'watchPath', 'unwatchPath', 'onFileChanged',
-      'getMetadata', 'setMetadata', 'getAllMetadata',
+      'mountPrism',
+      'unmountPrism',
+      'isPrismMounted',
+      'prismType',
+      'listPrisms',
+      'readFile',
+      'readFileAs',
+      'writeFile',
+      'writeFileAs',
+      'deleteFile',
+      'fileExists',
+      'downloadFile',
+      'listDirectory',
+      'searchFiles',
+      'setPermission',
+      'hasPermission',
+      'createSnapshot',
+      'deleteSnapshot',
+      'listSnapshots',
+      'snapshotDiff',
+      'backupPrism',
+      'restorePrism',
+      'watchPath',
+      'unwatchPath',
+      'onFileChanged',
+      'getMetadata',
+      'setMetadata',
+      'getAllMetadata',
       'setDebugLogging',
     ];
 
@@ -178,9 +200,7 @@ describe('PrismFSExtension — directory operations', () => {
   it('searchFiles filters by wildcard pattern', () => {
     extension.writeFile({ URI: 'fs://search/notes.txt', CONTENT: 'n' });
     extension.writeFile({ URI: 'fs://search/image.png', CONTENT: 'i' });
-    const results = JSON.parse(
-      extension.searchFiles({ URI: 'fs://', PATTERN: '*.txt' })
-    );
+    const results = JSON.parse(extension.searchFiles({ URI: 'fs://', PATTERN: '*.txt' }));
     assert.ok(results.every(r => r.endsWith('.txt')));
   });
 });
@@ -224,7 +244,9 @@ describe('PrismFSExtension — snapshots', () => {
     extension.writeFile({ URI: 'difftest://b.txt', CONTENT: 'added' });
     extension.createSnapshot({ PRISM: 'difftest', NAME: 'snap-b' });
 
-    const diff = JSON.parse(extension.snapshotDiff({ PRISM: 'difftest', S1: 'snap-a', S2: 'snap-b' }));
+    const diff = JSON.parse(
+      extension.snapshotDiff({ PRISM: 'difftest', S1: 'snap-a', S2: 'snap-b' })
+    );
     assert.ok(Array.isArray(diff.added));
     assert.ok(Array.isArray(diff.removed));
     assert.ok(Array.isArray(diff.modified));
@@ -357,7 +379,11 @@ describe('PrismFSExtension — onFileChanged hat', () => {
     // making the second write so the watcher isn't suppressed.
     await new Promise(resolve => setImmediate(resolve));
     extension.writeFile({ URI: 'fs://hat-multi.txt', CONTENT: '2' });
-    assert.equal(extension.onFileChanged({ UUID: uuid }), true, 'should fire again after second write');
+    assert.equal(
+      extension.onFileChanged({ UUID: uuid }),
+      true,
+      'should fire again after second write'
+    );
     assert.equal(extension.onFileChanged({ UUID: uuid }), false);
   });
 });

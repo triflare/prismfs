@@ -195,8 +195,10 @@ describe('PrismRegistry — writeFile limits', () => {
 
     const err = reg.writeFile('limitedprism', 'overflow.txt', 'data');
     assert.ok(err.startsWith('ERR'), 'should return error when file count is exceeded');
-    assert.ok(err.includes('LIMIT') || err.includes('limit') || err.includes('maximum'),
-      `expected limit error, got: ${err}`);
+    assert.ok(
+      err.includes('LIMIT') || err.includes('limit') || err.includes('maximum'),
+      `expected limit error, got: ${err}`
+    );
   });
 
   it('updating an existing file does not count as a new file', () => {

@@ -103,9 +103,7 @@ export function parseUri(uri) {
  * @returns {string}
  */
 export function normalisePath(filePath) {
-  return filePath
-    .replace(/\/{2,}/g, '/')
-    .replace(/\/$/, '');
+  return filePath.replace(/\/{2,}/g, '/').replace(/\/$/, '');
 }
 
 // ─── Wildcard matching ───────────────────────────────────────────────────────

@@ -47,9 +47,7 @@ export class SnapshotManager {
       );
     }
     if (bucket.some(s => s.name === snapshotName)) {
-      return Errors.exists(
-        `Snapshot "${snapshotName}" already exists for prism "${prismName}".`
-      );
+      return Errors.exists(`Snapshot "${snapshotName}" already exists for prism "${prismName}".`);
     }
 
     bucket.push({ name: snapshotName, timestamp: Date.now(), files: new Map(files) });
@@ -94,9 +92,7 @@ export class SnapshotManager {
     }
     const idx = bucket.findIndex(s => s.name === snapshotName);
     if (idx === -1) {
-      return Errors.notFound(
-        `Snapshot "${snapshotName}" not found for prism "${prismName}".`
-      );
+      return Errors.notFound(`Snapshot "${snapshotName}" not found for prism "${prismName}".`);
     }
 
     bucket.splice(idx, 1);

@@ -573,7 +573,10 @@ class PrismFSExtension {
 
     const isNew = !this._registry.fileExists(prism, filePath);
     const result = this._registry.writeFile(prism, filePath, String(args.CONTENT));
-    if (result) { this._dbg(`writeFile error: ${result}`); return; }
+    if (result) {
+      this._dbg(`writeFile error: ${result}`);
+      return;
+    }
 
     const uri = `${prism}://${filePath}`;
     const sprite = this._callerSpriteName();
@@ -643,7 +646,10 @@ class PrismFSExtension {
     }
 
     const result = this._registry.deleteFile(prism, filePath);
-    if (result) { this._dbg(`deleteFile error: ${result}`); return; }
+    if (result) {
+      this._dbg(`deleteFile error: ${result}`);
+      return;
+    }
 
     // Remove from OPFS asynchronously.
     if (this._registry.typeOf(prism) === PRISM_TYPE.PRISM && this._opfs.isAvailable()) {
@@ -677,7 +683,10 @@ class PrismFSExtension {
     }
 
     const content = this._registry.readFile(prism, filePath);
-    if (isError(content)) { this._dbg(`downloadFile error: ${content}`); return; }
+    if (isError(content)) {
+      this._dbg(`downloadFile error: ${content}`);
+      return;
+    }
 
     // Browser-only: trigger file download.
     if (typeof document !== 'undefined') {
@@ -749,7 +758,11 @@ class PrismFSExtension {
     const perm = String(args.PERM);
     const current = new Set(store.resolve(filePath || ''));
     const enable = args.VALUE === true || args.VALUE === 'true';
-    if (enable) { current.add(perm); } else { current.delete(perm); }
+    if (enable) {
+      current.add(perm);
+    } else {
+      current.delete(perm);
+    }
 
     const err = store.set(filePath || '', current);
     if (err) this._dbg(`setPermission error: ${err}`);
@@ -775,7 +788,10 @@ class PrismFSExtension {
     }
 
     const filesCopy = this._registry.snapshotFiles(prismName);
-    if (isError(filesCopy)) { this._dbg(`createSnapshot error: ${filesCopy}`); return; }
+    if (isError(filesCopy)) {
+      this._dbg(`createSnapshot error: ${filesCopy}`);
+      return;
+    }
 
     const result = this._snapshots.create(prismName, String(args.NAME), filesCopy);
     if (result) this._dbg(`createSnapshot error: ${result}`);
@@ -829,8 +845,12 @@ class PrismFSExtension {
   restorePrism(args) {
     this._ensureInit();
     let backupObj;
-    try { backupObj = JSON.parse(String(args.DATA)); }
-    catch { this._dbg('restorePrism: invalid JSON'); return; }
+    try {
+      backupObj = JSON.parse(String(args.DATA));
+    } catch {
+      this._dbg('restorePrism: invalid JSON');
+      return;
+    }
     if (!backupObj || typeof backupObj.name !== 'string') {
       this._dbg('restorePrism: missing name');
       return;
@@ -840,13 +860,18 @@ class PrismFSExtension {
     if (this._registry.isMounted(prismName)) this._registry.unmount(prismName);
 
     const mountResult = this._registry.mount(prismName, backupObj.type ?? PRISM_TYPE.PRISM);
-    if (mountResult) { this._dbg(`restorePrism mount error: ${mountResult}`); return; }
+    if (mountResult) {
+      this._dbg(`restorePrism mount error: ${mountResult}`);
+      return;
+    }
 
     if (backupObj.files && typeof backupObj.files === 'object') {
       for (const [path, f] of Object.entries(backupObj.files)) {
         this._registry.writeFile(prismName, path, f.content ?? '');
-        if (String(backupObj.type ?? PRISM_TYPE.PRISM) === PRISM_TYPE.PRISM &&
-            this._opfs.isAvailable()) {
+        if (
+          String(backupObj.type ?? PRISM_TYPE.PRISM) === PRISM_TYPE.PRISM &&
+          this._opfs.isAvailable()
+        ) {
           this._opfs.writeFile(prismName, path, f.content ?? '');
         }
       }
