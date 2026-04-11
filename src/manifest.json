@@ -1,9 +1,9 @@
 {
-  "name": "My TurboWarp Extension",
-  "id": "myTurboWarpExtension",
-  "version": "1.0.2",
-  "description": "A custom extension for TurboWarp",
-  "author": "Your Name",
-  "license": "LSL-1.0",
-  "url": "https://example.com/my-extension"
+  "name": "PrismFS",
+  "id": "prismfs",
+  "version": "1.0.0",
+  "description": "An OPFS-powered, volume-based file system for TurboWarp projects.",
+  "author": "Triflare",
+  "license": "GPL-3.0-only",
+  "url": "https://github.com/triflare/prismfs"
 }

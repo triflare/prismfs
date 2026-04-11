@@ -1,8 +1,8 @@
 {
   "type": "module",
-  "name": "@triflare/mint-tooling",
-  "version": "2.1.0",
-  "description": "A simple and painless custom TurboWarp extension development platform, powered by bundling.",
+  "name": "@triflare/prismfs",
+  "version": "1.0.0",
+  "description": "An OPFS-powered, volume-based file system for TurboWarp projects.",
   "main": "build/extension.js",
   "scripts": {
     "build": "node scripts/build.js",
@@ -38,7 +38,7 @@
     "turbowarp-extension"
   ],
   "author": "",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "GPL-3.0-only",
   "devDependencies": {
     "@eslint/js": "^10.0.0",
     "chokidar": "^5.0.0",

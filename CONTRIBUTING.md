@@ -1,120 +1,121 @@
-# Contributing to Mint
+# Contributing to PrismFS
 
-> [!INFO]
->
-> If you're reading this and you've just forked this repository, you may want to replace all mentions of the Mint toolchain with your extension's name.
+Thank you for your interest in contributing! PrismFS is a TurboWarp extension
+built on top of [Mint](./docs/mint-tooling/) — Triflare's modular extension
+development platform.
 
 ## What You'll Need
 
-1. Any semi-new version of Git
+1. Any recent version of Git
 2. A GitHub account
-3. Node.js and `npm` installed
-4. Working knowledge of JavaScript, YAML, or JSON
+3. Node.js and `npm` (or `pnpm`) installed
+4. Working knowledge of JavaScript
 
-## Understanding the Build Script
-
-Mint's build script is something called a "bundler", which means it concatenates _(or combines)_ a set of files into one. In Mint's case, the files it bundles are called "modules" or "ES modules". If you know about Webpack, you'll know exactly what we mean.
-
-The build process outputs three files:
-
-1. `build/extension.js`,
-2. `build/min.extension.js` _(if you have `terser`)_, and
-3. `build/pretty.extension.js` _(if you have `prettier`)_.
-
-If you ran `npm ci` before building, you will have installed `prettier` and `terser` already. If not, `min.extension.js` and `pretty.extension.js` will not appear. No problem!
-
-## Understanding TurboWarp extensions
-
-> [!INFO]
->
-> We have since removed this section to remove the overhead of updating this field if TurboWarp's extension system changes. **If you want guidance, see [TurboWarp's documentation](https://docs.turbowarp.org/development/extensions/introduction).**
-
-## Triflare's Stance on Quality
-
-### Using LLMs to Generate Extensions
-
-If AI code is used, it should meet or exceed human standards. We have both humans _(Triflare's dedicated reviewer team)_ and AIs _(CodeRabbit & GitHub Copilot)_ review all Pull requests to ensure they meet this standard.
-
-> [!WARNING]
->
-> A recent U.S. case found that purely AI-generated code may not be eligible for U.S. copyright protection and can be treated as public domain. However, any portions that a human author created or that a human has substantially modified remain eligible for copyright and may be licensed by their copyright holders. This warning applies only to the purely machine-generated parts; human-authored or significantly edited contributions can be copyrighted and licensed.
-
-## Quality Over All
-
-Triflare believes in quality over quantity. We want to keep our tools opinionated, so we will keep ensuring quality to keep it that way. For example, our goal is to turn Mint into something that all TurboWarp extension developers use to code their extensions.
-
-## Testing Your Extension Logic
-
-Mint ships a built-in unit-test scaffold powered by Node's native test runner (`node:test`). No extra frameworks or configuration files are needed.
-
-### Running Tests
-
-```bash
-# Run all tests once
-npm run test
-
-# Run tests in watch mode (re-runs on file changes)
-npm run test:watch
-```
-
-### Test File Layout
-
-Place your test files in the `tests/` directory using the `.test.js` suffix:
+## Project Layout
 
 ```
+src/
+  01-core.js          Extension class + all block definitions (entry point)
+  02-fs-utils.js      URI parsing, error helpers, constants
+  03-prisms.js        Prism registry and in-memory file system
+  04-permissions.js   Fine-grained permission store
+  05-snapshots.js     Snapshot manager
+  06-watchers.js      File watcher manager
+  07-metadata.js      Metadata tagging
 tests/
   helpers/
-    mock-scratch.js   # Scratch environment mock (provided)
-  01-core.test.js     # Tests for the extension class
-  02-example-module.test.js  # Tests for helper module functions
+    mock-scratch.js   Scratch/mint global mock (provided by Mint)
+  01-core.test.js     Extension class integration tests
+  02-fs-utils.test.js URI / error utility unit tests
+  03-prisms.test.js   Prism registry unit tests
+  04-permissions.test.js Permission store unit tests
+  05-snapshots.test.js   Snapshot manager unit tests
+  06-watchers.test.js    Watcher manager unit tests
+docs/
+  prismfs.md          User-facing documentation
+  mint-tooling/       Mint build-tooling documentation (do not edit)
 ```
 
-### Testing Helper Functions (Pure Logic)
+## Getting Started
 
-Functions exported from your modules can be imported and asserted against directly — no Scratch mock required:
+```bash
+# Install dependencies
+pnpm install        # or: npm install
 
-```js
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
-import { calculateDistance } from '../src/02-example-module.js';
+# Build
+npm run build
 
-describe('calculateDistance()', () => {
-  it('computes a 3-4-5 right triangle distance', () => {
-    assert.equal(calculateDistance({ X1: 0, Y1: 0, X2: 3, Y2: 4 }), 5);
-  });
-});
+# Run tests
+npm run test
+
+# Lint + format + validate + build + test in one command
+npm run fullstack
 ```
 
-### Testing Block Methods (Extension Class)
+## Error Conventions
 
-The extension class references the `Scratch` global, which doesn't exist in Node.js. Use the provided `installScratchMock` helper before importing your extension module:
+PrismFS errors always follow the structure `ERR<TYPE>: <message>`. Reporter
+blocks return this string instead of throwing so callers can detect failures
+without a try/catch. Possible error types:
+
+| Type         | Meaning                                   |
+| ------------ | ----------------------------------------- |
+| `NOTFOUND`   | Prism, file, or snapshot not found        |
+| `PERMISSION` | Operation not permitted by permission set |
+| `INVALIDURI` | Malformed PrismFS URI                     |
+| `RESERVED`   | Attempt to mount/unmount a reserved prism |
+| `LIMIT`      | A quota (prisms, snapshots, watchers, …)  |
+| `INVALID`    | Bad argument value                        |
+| `READONLY`   | Write on an immutable prism               |
+| `EXISTS`     | Name already taken                        |
+
+A file, directory, or prism **name must not start with the three uppercase
+letters `ERR`**, because PrismFS uses that prefix exclusively for error strings.
+
+## Testing
+
+Tests use Node's built-in `node:test` runner — no extra frameworks needed.
+
+```bash
+npm run test          # run all tests once
+npm run test:watch    # re-run on file changes
+```
+
+### Testing Pure Logic
+
+Functions exported from `02-fs-utils.js` through `07-metadata.js` are pure (or
+nearly so) and can be imported and asserted against directly:
 
 ```js
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import { parseUri } from '../src/02-fs-utils.js';
+assert.deepEqual(parseUri('fs://hello.txt'), { prism: 'fs', filePath: 'hello.txt' });
+```
+
+### Testing Block Methods
+
+Install the Scratch/mint mock before importing `01-core.js`:
+
+```js
 import { installScratchMock } from './helpers/mock-scratch.js';
-
-// Install the mock BEFORE importing the extension source.
 const { mock } = installScratchMock();
 let extension;
 mock.extensions.register = instance => {
   extension = instance;
 };
-
 await import('../src/01-core.js');
-
-describe('add()', () => {
-  it('adds two numbers', () => {
-    assert.equal(extension.add({ A: 3, B: 4 }), 7);
-  });
-});
 ```
 
-### Common Patterns
+## Quality Standards
 
-| What to test              | How                                                                    |
-| ------------------------- | ---------------------------------------------------------------------- |
-| Exported helper function  | Import directly and call with mock `args`                              |
-| Block method return value | Install the Scratch mock, import the core, call `extension.<method>()` |
-| `getInfo()` metadata      | Assert `typeof info.id`, `Array.isArray(info.blocks)`, etc.            |
-| Edge cases / defaults     | Pass `{}` or partial `args` objects                                    |
+- All new functionality should have unit tests.
+- Keep block implementations thin — delegate business logic to the helper modules.
+- Follow the existing code style (Prettier + ESLint configs are committed).
+- AI-generated code is welcome, but it must meet or exceed the human-authored
+  standard. See [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) for details.
+
+## Submitting a Pull Request
+
+1. Fork the repo and create a branch.
+2. Make your changes with tests.
+3. Run `npm run fullstack` — everything must pass.
+4. Open a pull request and describe what you changed and why.
