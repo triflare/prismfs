@@ -98,11 +98,11 @@ class PrismFSExtension {
     // but early block calls may not see files that were written in a previous
     // session. This is an accepted trade-off of the fire-and-forget approach
     // that keeps all block methods synchronous.
-    this._opfs.init().then(available => {
+    this._opfs.init().then(async available => {
       if (available) {
-        for (const name of this._registry.list()) {
-          this._loadPrismFromOpfs(name);
-        }
+        // Await all prism loads so they cannot overwrite newer in-memory writes
+        const loads = this._registry.list().map(name => this._loadPrismFromOpfs(name));
+        await Promise.all(loads);
         // Flush writes that arrived while init() was in-flight.
         for (const { prismName, filePath, content } of this._opfsPendingWrites) {
           this._opfs.writeFile(prismName, filePath, content);
@@ -132,16 +132,19 @@ class PrismFSExtension {
    *
    * @param {string} prismName  Lower-cased prism name.
    */
-  _loadPrismFromOpfs(prismName) {
+  async _loadPrismFromOpfs(prismName) {
     if (this._registry.typeOf(prismName) !== PRISM_TYPE.PRISM) return;
     if (!this._opfs.isAvailable()) return;
-    this._opfs.loadPrism(prismName).then(files => {
+    try {
+      const files = await this._opfs.loadPrism(prismName);
       if (files) {
         for (const [path, content] of files) {
           this._registry.writeFile(prismName, path, content);
         }
       }
-    });
+    } catch {
+      // Ignore OPFS load errors; in-memory registry remains the source of truth
+    }
   }
 
   /**
@@ -947,32 +950,74 @@ class PrismFSExtension {
     }
 
     const prismName = backupObj.name.toLowerCase();
+    const newType = backupObj.type ?? PRISM_TYPE.PRISM;
+    const isPersistent = String(newType) === PRISM_TYPE.PRISM;
+
     if (this._registry.isMounted(prismName)) {
       this._registry.unmount(prismName);
       this._clearPrismState(prismName);
     }
 
-    const mountResult = this._registry.mount(prismName, backupObj.type ?? PRISM_TYPE.PRISM);
-    if (mountResult) {
-      this._dbg(`restorePrism mount error: ${mountResult}`);
-      return;
-    }
-
-    if (backupObj.files && typeof backupObj.files === 'object') {
-      const isPersistent = String(backupObj.type ?? PRISM_TYPE.PRISM) === PRISM_TYPE.PRISM;
-      for (const [path, f] of Object.entries(backupObj.files)) {
-        this._registry.writeFile(prismName, path, f.content ?? '');
+    const doRestore = () => {
+      const mountResult = this._registry.mount(prismName, newType);
+      if (mountResult) {
+        this._dbg(`restorePrism mount error: ${mountResult}`);
+        return;
       }
-      // Persist the whole prism to OPFS in one pass after hydrating in-memory
-      // (avoids per-file write-amplification in the restore loop).
-      if (isPersistent) {
-        const allFiles = this._registry.snapshotFiles(prismName);
-        if (allFiles) {
-          for (const [path, entry] of allFiles) {
-            this._opfsWrite(prismName, path, entry.content ?? '');
+
+      if (backupObj.files && typeof backupObj.files === 'object') {
+        for (const [path, f] of Object.entries(backupObj.files)) {
+          this._registry.writeFile(prismName, path, f.content ?? '');
+          // Preserve timestamp fields when possible (convert ISO strings
+          // to numeric epoch ms to match the PrismRegistry file record shape).
+          const entry = this._registry.get(prismName);
+          try {
+            const rec = entry?.files?.get(path);
+            if (rec) {
+              if (typeof f.createdAt === 'number') {
+                rec.createdAt = f.createdAt;
+              } else if (typeof f.createdAt === 'string') {
+                const t = Date.parse(f.createdAt);
+                if (!Number.isNaN(t)) rec.createdAt = t;
+              }
+
+              if (typeof f.modifiedAt === 'number') {
+                rec.modifiedAt = f.modifiedAt;
+              } else if (typeof f.modifiedAt === 'string') {
+                const t2 = Date.parse(f.modifiedAt);
+                if (!Number.isNaN(t2)) rec.modifiedAt = t2;
+              }
+            }
+          } catch {
+            // Defensive: don't let metadata restoration break the restore loop
+          }
+        }
+
+        // Persist the whole prism to OPFS in one pass after hydrating
+        // in-memory (avoids per-file write-amplification in the restore loop).
+        if (isPersistent) {
+          const allFiles = this._registry.snapshotFiles(prismName);
+          if (allFiles) {
+            for (const [path, entry] of allFiles) {
+              this._opfsWrite(prismName, path, entry.content ?? '');
+            }
           }
         }
       }
+    };
+
+    // If persistent and OPFS available, remove any existing OPFS backing
+    // before hydrating the new snapshot to avoid stale files remaining.
+    if (isPersistent && this._opfs.isAvailable()) {
+      try {
+        // Fire-and-forget deletion; proceed with restore once deletion
+        // completes so new files won't be immediately removed.
+        this._opfs.deletePrism(prismName).then(doRestore, doRestore);
+      } catch {
+        doRestore();
+      }
+    } else {
+      doRestore();
     }
   }
 
@@ -1029,14 +1074,16 @@ class PrismFSExtension {
     this._ensureInit();
     const resolved = this._resolveUri(String(args.URI));
     if (isError(resolved)) return resolved;
-    return this._metadata.get(String(args.URI), String(args.TAG));
+    const uri = `${resolved.prism}://${resolved.filePath}`;
+    return this._metadata.get(uri, String(args.TAG));
   }
 
   setMetadata(args) {
     this._ensureInit();
     const resolved = this._resolveUri(String(args.URI));
     if (isError(resolved)) return;
-    const result = this._metadata.set(String(args.URI), String(args.TAG), String(args.VALUE));
+    const uri = `${resolved.prism}://${resolved.filePath}`;
+    const result = this._metadata.set(uri, String(args.TAG), String(args.VALUE));
     if (result) this._dbg(`setMetadata error: ${result}`);
   }
 
@@ -1044,7 +1091,8 @@ class PrismFSExtension {
     this._ensureInit();
     const resolved = this._resolveUri(String(args.URI));
     if (isError(resolved)) return resolved;
-    return JSON.stringify(this._metadata.getAll(String(args.URI)));
+    const uri = `${resolved.prism}://${resolved.filePath}`;
+    return JSON.stringify(this._metadata.getAll(uri));
   }
 
   // ─── Block implementations: debug ────────────────────────────────────────

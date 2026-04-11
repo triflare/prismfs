@@ -120,7 +120,8 @@ export class MetadataStore {
    */
   clearPrism(prismName) {
     const prefix = `${prismName}://`;
-    for (const key of this._store.keys()) {
+    // Iterate over a snapshot of keys so deletions don't affect iteration.
+    for (const key of Array.from(this._store.keys())) {
       if (key === prismName || key.startsWith(prefix)) {
         this._store.delete(key);
       }
