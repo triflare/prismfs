@@ -113,6 +113,20 @@ describe('PrismFSExtension — prism management', () => {
     assert.ok(extension.isPrismMounted({ NAME: 'docs' }));
   });
 
+  it('mountPrism mounts a temporary prism', () => {
+    const result = extension.mountPrism({ NAME: 'mycache', TYPE: 'temporary' });
+    assert.equal(result, '');
+    assert.ok(extension.isPrismMounted({ NAME: 'mycache' }));
+    assert.equal(extension.prismType({ NAME: 'mycache' }), 'temporary');
+  });
+
+  it('mountPrism mounts an immutable prism', () => {
+    const result = extension.mountPrism({ NAME: 'myfrozen', TYPE: 'immutable' });
+    assert.equal(result, '');
+    assert.ok(extension.isPrismMounted({ NAME: 'myfrozen' }));
+    assert.equal(extension.prismType({ NAME: 'myfrozen' }), 'immutable');
+  });
+
   it('unmountPrism removes a prism', () => {
     extension.mountPrism({ NAME: 'tounmount', TYPE: 'prism' });
     extension.unmountPrism({ NAME: 'tounmount' });
@@ -142,7 +156,43 @@ describe('PrismFSExtension — prism management', () => {
   });
 });
 
-// ─── File operation blocks ────────────────────────────────────────────────────
+// ─── Non-persistent prism cleanup ────────────────────────────────────────────
+
+describe('PrismFSExtension — non-persistent prism cleanup', () => {
+  it('cleanup removes temporary prisms but keeps persistent ones', () => {
+    extension.mountPrism({ NAME: 'cleanup-temp', TYPE: 'temporary' });
+    extension.mountPrism({ NAME: 'cleanup-persist', TYPE: 'prism' });
+    assert.ok(extension.isPrismMounted({ NAME: 'cleanup-temp' }));
+
+    extension._cleanupNonPersistentPrisms();
+
+    assert.equal(extension.isPrismMounted({ NAME: 'cleanup-temp' }), false);
+    assert.ok(extension.isPrismMounted({ NAME: 'cleanup-persist' }));
+  });
+
+  it('cleanup removes immutable prisms', () => {
+    extension.mountPrism({ NAME: 'cleanup-immut', TYPE: 'immutable' });
+    assert.ok(extension.isPrismMounted({ NAME: 'cleanup-immut' }));
+
+    extension._cleanupNonPersistentPrisms();
+
+    assert.equal(extension.isPrismMounted({ NAME: 'cleanup-immut' }), false);
+  });
+
+  it('cleanup re-mounts the default tmp prism so tmp:// URIs keep working', () => {
+    extension._cleanupNonPersistentPrisms();
+    assert.ok(extension.isPrismMounted({ NAME: 'tmp' }), 'tmp should be available after cleanup');
+    assert.equal(extension.prismType({ NAME: 'tmp' }), 'temporary');
+  });
+
+  it('temporary prisms mounted after cleanup remain available', () => {
+    // Simulate the bug scenario: mount a temporary prism, then run cleanup
+    // (as if PROJECT_STOP_ALL fired), then mount again for the new run.
+    extension._cleanupNonPersistentPrisms();
+    extension.mountPrism({ NAME: 'post-cleanup-temp', TYPE: 'temporary' });
+    assert.ok(extension.isPrismMounted({ NAME: 'post-cleanup-temp' }));
+  });
+});
 
 describe('PrismFSExtension — file operations', () => {
   it('writeFile and readFile round-trip', () => {

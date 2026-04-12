@@ -94,7 +94,16 @@ describe('PrismRegistry — cleanupTemporary()', () => {
 
     assert.ok(reg.isMounted('persist'));
     assert.equal(reg.isMounted('cache'), false);
-    assert.equal(reg.isMounted('tmp'), false); // default tmp removed too
+  });
+
+  it('re-mounts the default tmp prism after cleanup', () => {
+    const reg = new PrismRegistry();
+    // tmp is mounted at construction time
+    assert.ok(reg.isMounted('tmp'), 'tmp should exist before cleanup');
+    reg.cleanupTemporary();
+
+    assert.ok(reg.isMounted('tmp'), 'tmp should be re-mounted after cleanup');
+    assert.equal(reg.typeOf('tmp'), PRISM_TYPE.TEMPORARY);
   });
 
   it('also removes immutable prisms on green flag (per docs)', () => {

@@ -111,11 +111,15 @@ class PrismFSExtension {
       this._opfsPendingWrites = [];
     });
 
-    // Attach TurboWarp/Scratch runtime hooks for green-flag / project-stop.
+    // Attach TurboWarp/Scratch runtime hook for project stop.
+    // We listen only to PROJECT_STOP_ALL (emitted by Runtime.stopAll(), which is
+    // always called before green-flag scripts start) and NOT to PROJECT_RUN_START.
+    // Listening to PROJECT_RUN_START is unsafe because in some TurboWarp execution
+    // modes it fires *after* green-flag scripts have already begun running, which
+    // would silently undo any temporary or immutable prisms those scripts just
+    // mounted — the exact bug reported in the issue tracker.
     if (this._runtime) {
-      const cleanup = () => this._cleanupNonPersistentPrisms();
-      this._runtime.on('PROJECT_RUN_START', cleanup);
-      this._runtime.on('PROJECT_STOP_ALL', cleanup);
+      this._runtime.on('PROJECT_STOP_ALL', () => this._cleanupNonPersistentPrisms());
     }
   }
 
@@ -178,8 +182,7 @@ class PrismFSExtension {
 
   /**
    * Unmount all non-persistent prisms (temporary and immutable) and clear
-   * their associated per-prism state.  Called on PROJECT_RUN_START and
-   * PROJECT_STOP_ALL.
+   * their associated per-prism state.  Called on PROJECT_STOP_ALL.
    */
   _cleanupNonPersistentPrisms() {
     // Snapshot the list before cleanup so deletions don't affect iteration.

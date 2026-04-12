@@ -140,6 +140,9 @@ export class PrismRegistry {
    * Called when the green flag is clicked or the project is stopped.
    * Persistent `prism`-type prisms are preserved so their OPFS-backed data
    * survives the reset.
+   *
+   * The default `tmp` prism is automatically re-created after cleanup so that
+   * `tmp://` URIs remain usable at the start of every new run.
    */
   cleanupTemporary() {
     for (const [name, entry] of this._prisms.entries()) {
@@ -147,6 +150,8 @@ export class PrismRegistry {
         this._prisms.delete(name);
       }
     }
+    // Re-mount the built-in temporary prism so it is always available.
+    this._createEntry('tmp', PRISM_TYPE.TEMPORARY);
   }
 
   // ─── In-memory file operations ─────────────────────────────────────────────
