@@ -55,62 +55,50 @@ describe('PrismFSExtension — getInfo()', () => {
       .blocks.filter(b => typeof b === 'object')
       .map(b => b.opcode);
 
-    const expected = ['commandOp', 'reporterOp', 'booleanOp', 'onFileChanged'];
+    const expected = [
+      'mountPrism',
+      'unmountPrism',
+      'isPrismMounted',
+      'prismType',
+      'listPrisms',
+      'readFileAs',
+      'writeFileAs',
+      'deleteFile',
+      'fileExists',
+      'downloadFile',
+      'listDirectory',
+      'searchFiles',
+      'setPermission',
+      'hasPermission',
+      'createSnapshot',
+      'deleteSnapshot',
+      'listSnapshots',
+      'snapshotDiff',
+      'backupPrism',
+      'restorePrism',
+      'watchPath',
+      'unwatchPath',
+      'onFileChanged',
+      'getMetadata',
+      'setMetadata',
+      'getAllMetadata',
+      'setDebugLogging',
+    ];
 
     for (const opcode of expected) {
       assert.ok(opcodes.includes(opcode), `missing opcode: ${opcode}`);
     }
 
-    assert.equal(opcodes.includes('mountPrism'), false);
-    assert.equal(opcodes.includes('readFileAs'), false);
-    assert.equal(opcodes.includes('setMetadata'), false);
+    // readFile and writeFile were consolidated into readFileAs/writeFileAs.
+    assert.equal(opcodes.includes('readFile'), false, 'readFile block was consolidated into readFileAs');
+    assert.equal(opcodes.includes('writeFile'), false, 'writeFile block was consolidated into writeFileAs');
   });
 
-  it('has operation, prismType, readFormat, and permission menus', () => {
+  it('has prismType, readFormat, and permission menus', () => {
     const { menus } = extension.getInfo();
-    assert.ok(menus.commandOperation, 'missing menu: commandOperation');
-    assert.ok(menus.reporterOperation, 'missing menu: reporterOperation');
-    assert.ok(menus.booleanOperation, 'missing menu: booleanOperation');
     assert.ok(menus.prismType, 'missing menu: prismType');
     assert.ok(menus.readFormat, 'missing menu: readFormat');
     assert.ok(menus.permission, 'missing menu: permission');
-  });
-});
-
-describe('PrismFSExtension — consolidated operation blocks', () => {
-  it('commandOp can mount and unmount a prism', () => {
-    const mountResult = extension.commandOp({
-      OP: 'mountPrism',
-      NAME: 'consolidated-prism',
-      TYPE: 'temporary',
-    });
-    assert.equal(mountResult, '');
-    assert.equal(extension.isPrismMounted({ NAME: 'consolidated-prism' }), true);
-
-    extension.commandOp({ OP: 'unmountPrism', NAME: 'consolidated-prism' });
-    assert.equal(extension.isPrismMounted({ NAME: 'consolidated-prism' }), false);
-  });
-
-  it('reporterOp and booleanOp route file operations correctly', () => {
-    extension.commandOp({
-      OP: 'writeFileAs',
-      URI: 'fs://consolidated.txt',
-      CONTENT: 'hello',
-      FORMAT: 'text',
-    });
-
-    const content = extension.reporterOp({
-      OP: 'readFileAs',
-      URI: 'fs://consolidated.txt',
-      FORMAT: 'text',
-    });
-    assert.equal(content, 'hello');
-
-    const exists = extension.booleanOp({
-      OP: 'fileExists',
-      URI: 'fs://consolidated.txt',
-    });
-    assert.equal(exists, true);
   });
 });
 

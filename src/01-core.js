@@ -295,47 +295,6 @@ class PrismFSExtension {
       menuIconURI: mint.assets.get('icons/menu.svg') ?? '',
       // blockIconURI: No block icon URI, because block icon URIs are your mom's ligma.
       menus: {
-        commandOperation: {
-          acceptReporters: true,
-          items: [
-            { text: Scratch.translate('mount prism'), value: 'mountPrism' },
-            { text: Scratch.translate('unmount prism'), value: 'unmountPrism' },
-            { text: Scratch.translate('write file'), value: 'writeFileAs' },
-            { text: Scratch.translate('delete file'), value: 'deleteFile' },
-            { text: Scratch.translate('download file'), value: 'downloadFile' },
-            { text: Scratch.translate('set permission'), value: 'setPermission' },
-            { text: Scratch.translate('create snapshot'), value: 'createSnapshot' },
-            { text: Scratch.translate('delete snapshot'), value: 'deleteSnapshot' },
-            { text: Scratch.translate('restore prism'), value: 'restorePrism' },
-            { text: Scratch.translate('unwatch path'), value: 'unwatchPath' },
-            { text: Scratch.translate('set metadata'), value: 'setMetadata' },
-            { text: Scratch.translate('set debug logging'), value: 'setDebugLogging' },
-          ],
-        },
-        reporterOperation: {
-          acceptReporters: true,
-          items: [
-            { text: Scratch.translate('type of prism'), value: 'prismType' },
-            { text: Scratch.translate('list mounted prisms'), value: 'listPrisms' },
-            { text: Scratch.translate('read file'), value: 'readFileAs' },
-            { text: Scratch.translate('list directory'), value: 'listDirectory' },
-            { text: Scratch.translate('search files'), value: 'searchFiles' },
-            { text: Scratch.translate('list snapshots'), value: 'listSnapshots' },
-            { text: Scratch.translate('diff snapshots'), value: 'snapshotDiff' },
-            { text: Scratch.translate('backup prism'), value: 'backupPrism' },
-            { text: Scratch.translate('watch path'), value: 'watchPath' },
-            { text: Scratch.translate('get metadata'), value: 'getMetadata' },
-            { text: Scratch.translate('get all metadata'), value: 'getAllMetadata' },
-          ],
-        },
-        booleanOperation: {
-          acceptReporters: true,
-          items: [
-            { text: Scratch.translate('is prism mounted'), value: 'isPrismMounted' },
-            { text: Scratch.translate('file exists'), value: 'fileExists' },
-            { text: Scratch.translate('has permission'), value: 'hasPermission' },
-          ],
-        },
         prismType: {
           acceptReporters: true,
           items: [
@@ -363,163 +322,228 @@ class PrismFSExtension {
         },
       },
       blocks: [
-        // ── Consolidated command operations ──────────────────────────────────
+        // ── Prism management ─────────────────────────────────────────────────
         {
-          opcode: 'commandOp',
+          opcode: 'mountPrism',
           blockType: 'command',
-          text: Scratch.translate(
-            '[OP] prism [NAME] type [TYPE] uri [URI] content [CONTENT] format [FORMAT] file [FILENAME] perm [PERM] bool [BVALUE] prism2 [PRISM] snapshot [SNAPSHOT] data [DATA] uuid [UUID] tag [TAG] value [VALUE]'
-          ),
+          text: Scratch.translate('mount prism [NAME] as [TYPE]'),
           arguments: {
-            OP: { type: 'string', menu: 'commandOperation', defaultValue: 'mountPrism' },
             NAME: { type: 'string', defaultValue: 'myprism' },
             TYPE: { type: 'string', menu: 'prismType', defaultValue: PRISM_TYPE.PRISM },
+          },
+        },
+        {
+          opcode: 'unmountPrism',
+          blockType: 'command',
+          text: Scratch.translate('unmount prism [NAME]'),
+          arguments: { NAME: { type: 'string', defaultValue: 'myprism' } },
+        },
+        {
+          opcode: 'isPrismMounted',
+          blockType: 'Boolean',
+          text: Scratch.translate('is prism [NAME] mounted?'),
+          arguments: { NAME: { type: 'string', defaultValue: 'fs' } },
+        },
+        {
+          opcode: 'prismType',
+          blockType: 'reporter',
+          text: Scratch.translate('type of prism [NAME]'),
+          arguments: { NAME: { type: 'string', defaultValue: 'fs' } },
+        },
+        {
+          opcode: 'listPrisms',
+          blockType: 'reporter',
+          text: Scratch.translate('list of mounted prisms'),
+        },
+        '---',
+        // ── File operations ──────────────────────────────────────────────────
+        {
+          opcode: 'readFileAs',
+          blockType: 'reporter',
+          text: Scratch.translate('read [URI] as [FORMAT]'),
+          arguments: {
             URI: { type: 'string', defaultValue: 'fs://hello.txt' },
+            FORMAT: { type: 'string', menu: 'readFormat', defaultValue: 'text' },
+          },
+        },
+        {
+          opcode: 'writeFileAs',
+          blockType: 'command',
+          text: Scratch.translate('write [CONTENT] as [FORMAT] to [URI]'),
+          arguments: {
             CONTENT: { type: 'string', defaultValue: 'Hello, PrismFS!' },
             FORMAT: { type: 'string', menu: 'readFormat', defaultValue: 'text' },
-            FILENAME: { type: 'string', defaultValue: 'hello.txt' },
-            PERM: { type: 'string', menu: 'permission', defaultValue: PERMISSION.WRITE },
-            BVALUE: { type: 'Boolean', defaultValue: true },
-            PRISM: { type: 'string', defaultValue: 'fs' },
-            SNAPSHOT: { type: 'string', defaultValue: 'before-update' },
-            DATA: { type: 'string', defaultValue: '{}' },
-            UUID: { type: 'string', defaultValue: '' },
-            TAG: { type: 'string', defaultValue: 'author' },
-            VALUE: { type: 'string', defaultValue: 'Alice' },
-          },
-        },
-        // ── Consolidated reporter operations ─────────────────────────────────
-        {
-          opcode: 'reporterOp',
-          blockType: 'reporter',
-          text: Scratch.translate(
-            '[OP] prism [NAME] uri [URI] format [FORMAT] pattern [PATTERN] prism2 [PRISM] snapshot [SNAPSHOT] snapshot2 [SNAPSHOT2] tag [TAG]'
-          ),
-          arguments: {
-            OP: { type: 'string', menu: 'reporterOperation', defaultValue: 'listPrisms' },
-            NAME: { type: 'string', defaultValue: 'fs' },
             URI: { type: 'string', defaultValue: 'fs://hello.txt' },
-            FORMAT: { type: 'string', menu: 'readFormat', defaultValue: 'text' },
-            PATTERN: { type: 'string', defaultValue: 'fs://**' },
-            PRISM: { type: 'string', defaultValue: 'fs' },
-            SNAPSHOT: { type: 'string', defaultValue: 'before-update' },
-            SNAPSHOT2: { type: 'string', defaultValue: 'after-update' },
-            TAG: { type: 'string', defaultValue: 'createdAt' },
           },
         },
-        // ── Consolidated boolean operations ──────────────────────────────────
         {
-          opcode: 'booleanOp',
+          opcode: 'deleteFile',
+          blockType: 'command',
+          text: Scratch.translate('delete file [URI]'),
+          arguments: { URI: { type: 'string', defaultValue: 'fs://hello.txt' } },
+        },
+        {
+          opcode: 'fileExists',
           blockType: 'Boolean',
-          text: Scratch.translate('[OP] prism [NAME] uri [URI] perm [PERM]'),
+          text: Scratch.translate('file [URI] exists?'),
+          arguments: { URI: { type: 'string', defaultValue: 'fs://hello.txt' } },
+        },
+        {
+          opcode: 'downloadFile',
+          blockType: 'command',
+          text: Scratch.translate('download [URI] as [FILENAME]'),
           arguments: {
-            OP: { type: 'string', menu: 'booleanOperation', defaultValue: 'isPrismMounted' },
-            NAME: { type: 'string', defaultValue: 'fs' },
             URI: { type: 'string', defaultValue: 'fs://hello.txt' },
+            FILENAME: { type: 'string', defaultValue: 'hello.txt' },
+          },
+        },
+        '---',
+        // ── Directory operations ─────────────────────────────────────────────
+        {
+          opcode: 'listDirectory',
+          blockType: 'reporter',
+          text: Scratch.translate('list files in [URI]'),
+          arguments: { URI: { type: 'string', defaultValue: 'fs://docs' } },
+        },
+        {
+          opcode: 'searchFiles',
+          blockType: 'reporter',
+          text: Scratch.translate('search [URI] for [PATTERN]'),
+          arguments: {
+            URI: { type: 'string', defaultValue: 'fs://' },
+            PATTERN: { type: 'string', defaultValue: '*.txt' },
+          },
+        },
+        '---',
+        // ── Permissions ──────────────────────────────────────────────────────
+        {
+          opcode: 'setPermission',
+          blockType: 'command',
+          text: Scratch.translate('set [PERM] on [URI] to [VALUE]'),
+          arguments: {
+            PERM: { type: 'string', menu: 'permission', defaultValue: PERMISSION.WRITE },
+            URI: { type: 'string', defaultValue: 'fs://docs' },
+            VALUE: { type: 'Boolean', defaultValue: true },
+          },
+        },
+        {
+          opcode: 'hasPermission',
+          blockType: 'Boolean',
+          text: Scratch.translate('[URI] has [PERM] permission?'),
+          arguments: {
+            URI: { type: 'string', defaultValue: 'fs://docs' },
             PERM: { type: 'string', menu: 'permission', defaultValue: PERMISSION.READ },
           },
         },
         '---',
-        // ── File watching hat ────────────────────────────────────────────────
+        // ── Snapshots ────────────────────────────────────────────────────────
+        {
+          opcode: 'createSnapshot',
+          blockType: 'command',
+          text: Scratch.translate('snapshot prism [PRISM] as [NAME]'),
+          arguments: {
+            PRISM: { type: 'string', defaultValue: 'fs' },
+            NAME: { type: 'string', defaultValue: 'before-update' },
+          },
+        },
+        {
+          opcode: 'deleteSnapshot',
+          blockType: 'command',
+          text: Scratch.translate('delete snapshot [NAME] from prism [PRISM]'),
+          arguments: {
+            NAME: { type: 'string', defaultValue: 'before-update' },
+            PRISM: { type: 'string', defaultValue: 'fs' },
+          },
+        },
+        {
+          opcode: 'listSnapshots',
+          blockType: 'reporter',
+          text: Scratch.translate('snapshots of prism [PRISM]'),
+          arguments: { PRISM: { type: 'string', defaultValue: 'fs' } },
+        },
+        {
+          opcode: 'snapshotDiff',
+          blockType: 'reporter',
+          text: Scratch.translate('diff prism [PRISM] snapshot [S1] → [S2]'),
+          arguments: {
+            PRISM: { type: 'string', defaultValue: 'fs' },
+            S1: { type: 'string', defaultValue: 'before-update' },
+            S2: { type: 'string', defaultValue: 'after-update' },
+          },
+        },
+        '---',
+        // ── Backup & restore ─────────────────────────────────────────────────
+        {
+          opcode: 'backupPrism',
+          blockType: 'reporter',
+          text: Scratch.translate('backup prism [NAME]'),
+          arguments: { NAME: { type: 'string', defaultValue: 'fs' } },
+        },
+        {
+          opcode: 'restorePrism',
+          blockType: 'command',
+          text: Scratch.translate('restore prism from backup [DATA]'),
+          arguments: { DATA: { type: 'string', defaultValue: '{}' } },
+        },
+        '---',
+        // ── File watching ────────────────────────────────────────────────────
+        {
+          opcode: 'watchPath',
+          blockType: 'reporter',
+          text: Scratch.translate('watch [PATTERN]'),
+          arguments: { PATTERN: { type: 'string', defaultValue: 'fs://**' } },
+        },
+        {
+          opcode: 'unwatchPath',
+          blockType: 'command',
+          text: Scratch.translate('unwatch [UUID]'),
+          arguments: { UUID: { type: 'string', defaultValue: '' } },
+        },
         {
           opcode: 'onFileChanged',
           blockType: 'hat',
           text: Scratch.translate('when [UUID] fires'),
           arguments: { UUID: { type: 'string', defaultValue: '' } },
         },
+        '---',
+        // ── Metadata ─────────────────────────────────────────────────────────
+        {
+          opcode: 'getMetadata',
+          blockType: 'reporter',
+          text: Scratch.translate('metadata [TAG] of [URI]'),
+          arguments: {
+            TAG: { type: 'string', defaultValue: 'createdAt' },
+            URI: { type: 'string', defaultValue: 'fs://hello.txt' },
+          },
+        },
+        {
+          opcode: 'setMetadata',
+          blockType: 'command',
+          text: Scratch.translate('set metadata [TAG] of [URI] to [VALUE]'),
+          arguments: {
+            TAG: { type: 'string', defaultValue: 'author' },
+            URI: { type: 'string', defaultValue: 'fs://hello.txt' },
+            VALUE: { type: 'string', defaultValue: 'Alice' },
+          },
+        },
+        {
+          opcode: 'getAllMetadata',
+          blockType: 'reporter',
+          text: Scratch.translate('all metadata of [URI]'),
+          arguments: { URI: { type: 'string', defaultValue: 'fs://hello.txt' } },
+        },
+        '---',
+        // ── Debug ────────────────────────────────────────────────────────────
+        {
+          opcode: 'setDebugLogging',
+          blockType: 'command',
+          text: Scratch.translate('set debug logging [VALUE]'),
+          arguments: {
+            VALUE: { type: 'Boolean', defaultValue: false },
+          },
+        },
       ],
     };
-  }
-
-  commandOp(args, util) {
-    this._ensureInit();
-    const op = String(args.OP);
-    switch (op) {
-      case 'mountPrism':
-        return this.mountPrism({ NAME: args.NAME, TYPE: args.TYPE });
-      case 'unmountPrism':
-        return this.unmountPrism({ NAME: args.NAME });
-      case 'writeFileAs':
-        return this.writeFileAs(
-          { URI: args.URI, CONTENT: args.CONTENT, FORMAT: args.FORMAT },
-          util
-        );
-      case 'deleteFile':
-        return this.deleteFile({ URI: args.URI });
-      case 'downloadFile':
-        return this.downloadFile({ URI: args.URI, FILENAME: args.FILENAME });
-      case 'setPermission':
-        return this.setPermission({ URI: args.URI, PERM: args.PERM, VALUE: args.BVALUE });
-      case 'createSnapshot':
-        return this.createSnapshot({ PRISM: args.PRISM, NAME: args.SNAPSHOT });
-      case 'deleteSnapshot':
-        return this.deleteSnapshot({ PRISM: args.PRISM, NAME: args.SNAPSHOT });
-      case 'restorePrism':
-        return this.restorePrism({ DATA: args.DATA }, util);
-      case 'unwatchPath':
-        return this.unwatchPath({ UUID: args.UUID });
-      case 'setMetadata':
-        return this.setMetadata(
-          { URI: args.URI, TAG: args.TAG, VALUE: args.VALUE },
-          util
-        );
-      case 'setDebugLogging':
-        return this.setDebugLogging({ VALUE: args.BVALUE });
-      default:
-        this._dbg(`commandOp: unknown operation "${op}"`);
-    }
-  }
-
-  reporterOp(args) {
-    this._ensureInit();
-    const op = String(args.OP);
-    switch (op) {
-      case 'prismType':
-        return this.prismType({ NAME: args.NAME });
-      case 'listPrisms':
-        return this.listPrisms();
-      case 'readFileAs':
-        return this.readFileAs({ URI: args.URI, FORMAT: args.FORMAT });
-      case 'listDirectory':
-        return this.listDirectory({ URI: args.URI });
-      case 'searchFiles':
-        return this.searchFiles({ URI: args.URI, PATTERN: args.PATTERN });
-      case 'listSnapshots':
-        return this.listSnapshots({ PRISM: args.PRISM });
-      case 'snapshotDiff':
-        return this.snapshotDiff({
-          PRISM: args.PRISM,
-          S1: args.SNAPSHOT,
-          S2: args.SNAPSHOT2,
-        });
-      case 'backupPrism':
-        return this.backupPrism({ NAME: args.NAME });
-      case 'watchPath':
-        return this.watchPath({ PATTERN: args.PATTERN });
-      case 'getMetadata':
-        return this.getMetadata({ URI: args.URI, TAG: args.TAG });
-      case 'getAllMetadata':
-        return this.getAllMetadata({ URI: args.URI });
-      default:
-        this._dbg(`reporterOp: unknown operation "${op}"`);
-        return '';
-    }
-  }
-
-  booleanOp(args) {
-    this._ensureInit();
-    const op = String(args.OP);
-    switch (op) {
-      case 'isPrismMounted':
-        return this.isPrismMounted({ NAME: args.NAME });
-      case 'fileExists':
-        return this.fileExists({ URI: args.URI });
-      case 'hasPermission':
-        return this.hasPermission({ URI: args.URI, PERM: args.PERM });
-      default:
-        this._dbg(`booleanOp: unknown operation "${op}"`);
-        return false;
-    }
   }
 
   // ─── Block implementations: prism management ─────────────────────────────
