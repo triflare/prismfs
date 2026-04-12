@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@triflare/prismfs",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "An OPFS-powered, volume-based file system for TurboWarp projects.",
   "main": "build/extension.js",
   "scripts": {
