@@ -61,9 +61,7 @@ describe('PrismFSExtension — getInfo()', () => {
       'isPrismMounted',
       'prismType',
       'listPrisms',
-      'readFile',
       'readFileAs',
-      'writeFile',
       'writeFileAs',
       'deleteFile',
       'fileExists',
@@ -90,6 +88,10 @@ describe('PrismFSExtension — getInfo()', () => {
     for (const opcode of expected) {
       assert.ok(opcodes.includes(opcode), `missing opcode: ${opcode}`);
     }
+
+    // readFile and writeFile were consolidated into readFileAs/writeFileAs.
+    assert.equal(opcodes.includes('readFile'), false, 'readFile block was consolidated into readFileAs');
+    assert.equal(opcodes.includes('writeFile'), false, 'writeFile block was consolidated into writeFileAs');
   });
 
   it('has prismType, readFormat, and permission menus', () => {

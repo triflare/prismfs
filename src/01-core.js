@@ -358,12 +358,6 @@ class PrismFSExtension {
         '---',
         // ── File operations ──────────────────────────────────────────────────
         {
-          opcode: 'readFile',
-          blockType: 'reporter',
-          text: Scratch.translate('read [URI]'),
-          arguments: { URI: { type: 'string', defaultValue: 'fs://hello.txt' } },
-        },
-        {
           opcode: 'readFileAs',
           blockType: 'reporter',
           text: Scratch.translate('read [URI] as [FORMAT]'),
@@ -373,21 +367,12 @@ class PrismFSExtension {
           },
         },
         {
-          opcode: 'writeFile',
-          blockType: 'command',
-          text: Scratch.translate('write [CONTENT] to [URI]'),
-          arguments: {
-            CONTENT: { type: 'string', defaultValue: 'Hello, PrismFS!' },
-            URI: { type: 'string', defaultValue: 'fs://hello.txt' },
-          },
-        },
-        {
           opcode: 'writeFileAs',
           blockType: 'command',
           text: Scratch.translate('write [CONTENT] as [FORMAT] to [URI]'),
           arguments: {
-            CONTENT: { type: 'string', defaultValue: '' },
-            FORMAT: { type: 'string', menu: 'readFormat', defaultValue: 'base64' },
+            CONTENT: { type: 'string', defaultValue: 'Hello, PrismFS!' },
+            FORMAT: { type: 'string', menu: 'readFormat', defaultValue: 'text' },
             URI: { type: 'string', defaultValue: 'fs://hello.txt' },
           },
         },

@@ -121,6 +121,21 @@ describe('PrismRegistry — cleanupTemporary()', () => {
 
     assert.ok(reg.isMounted('docs'));
   });
+
+  it('does not overwrite a persistent prism that replaced the default tmp', () => {
+    const reg = new PrismRegistry();
+    // Simulate a user replacing the temporary tmp with a persistent one.
+    reg.unmount('tmp');
+    reg.mount('tmp', PRISM_TYPE.PRISM);
+    assert.equal(reg.typeOf('tmp'), PRISM_TYPE.PRISM);
+
+    reg.cleanupTemporary();
+
+    // The persistent tmp should survive — cleanupTemporary should not
+    // silently overwrite it with a fresh temporary entry.
+    assert.ok(reg.isMounted('tmp'), 'persistent tmp should still be mounted');
+    assert.equal(reg.typeOf('tmp'), PRISM_TYPE.PRISM);
+  });
 });
 
 // ─── In-memory file operations ────────────────────────────────────────────────

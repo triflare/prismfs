@@ -141,8 +141,11 @@ export class PrismRegistry {
    * Persistent `prism`-type prisms are preserved so their OPFS-backed data
    * survives the reset.
    *
-   * The default `tmp` prism is automatically re-created after cleanup so that
-   * `tmp://` URIs remain usable at the start of every new run.
+   * The default `tmp` prism is re-created after cleanup only when it is no
+   * longer present — i.e. it was a standard temporary prism that just got
+   * cleaned up.  If the caller previously unmounted the built-in `tmp` and
+   * replaced it with a persistent prism of the same name, that persistent
+   * prism survives the deletion pass and is left untouched here.
    */
   cleanupTemporary() {
     for (const [name, entry] of this._prisms.entries()) {
@@ -150,8 +153,12 @@ export class PrismRegistry {
         this._prisms.delete(name);
       }
     }
-    // Re-mount the built-in temporary prism so it is always available.
-    this._createEntry('tmp', PRISM_TYPE.TEMPORARY);
+    // Re-mount the built-in temporary prism only when it was removed above so
+    // that tmp:// URIs keep working across runs without overwriting a
+    // persistent prism the caller deliberately mounted under the name "tmp".
+    if (!this._prisms.has('tmp')) {
+      this._createEntry('tmp', PRISM_TYPE.TEMPORARY);
+    }
   }
 
   // ─── In-memory file operations ─────────────────────────────────────────────
