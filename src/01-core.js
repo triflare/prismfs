@@ -323,10 +323,7 @@ class PrismFSExtension {
             { text: Scratch.translate('list snapshots'), value: 'listSnapshots' },
             { text: Scratch.translate('diff snapshots'), value: 'snapshotDiff' },
             { text: Scratch.translate('backup prism'), value: 'backupPrism' },
-            {
-              text: Scratch.translate('watch path (returns uuid; unwatch via command op)'),
-              value: 'watchPath',
-            },
+            { text: Scratch.translate('watch path'), value: 'watchPath' },
             { text: Scratch.translate('get metadata'), value: 'getMetadata' },
             { text: Scratch.translate('get all metadata'), value: 'getAllMetadata' },
           ],
