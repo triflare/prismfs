@@ -94,7 +94,16 @@ describe('PrismRegistry — cleanupTemporary()', () => {
 
     assert.ok(reg.isMounted('persist'));
     assert.equal(reg.isMounted('cache'), false);
-    assert.equal(reg.isMounted('tmp'), false); // default tmp removed too
+  });
+
+  it('re-mounts the default tmp prism after cleanup', () => {
+    const reg = new PrismRegistry();
+    // tmp is mounted at construction time
+    assert.ok(reg.isMounted('tmp'), 'tmp should exist before cleanup');
+    reg.cleanupTemporary();
+
+    assert.ok(reg.isMounted('tmp'), 'tmp should be re-mounted after cleanup');
+    assert.equal(reg.typeOf('tmp'), PRISM_TYPE.TEMPORARY);
   });
 
   it('also removes immutable prisms on green flag (per docs)', () => {
@@ -111,6 +120,21 @@ describe('PrismRegistry — cleanupTemporary()', () => {
     reg.cleanupTemporary();
 
     assert.ok(reg.isMounted('docs'));
+  });
+
+  it('does not overwrite a persistent prism that replaced the default tmp', () => {
+    const reg = new PrismRegistry();
+    // Simulate a user replacing the temporary tmp with a persistent one.
+    reg.unmount('tmp');
+    reg.mount('tmp', PRISM_TYPE.PRISM);
+    assert.equal(reg.typeOf('tmp'), PRISM_TYPE.PRISM);
+
+    reg.cleanupTemporary();
+
+    // The persistent tmp should survive — cleanupTemporary should not
+    // silently overwrite it with a fresh temporary entry.
+    assert.ok(reg.isMounted('tmp'), 'persistent tmp should still be mounted');
+    assert.equal(reg.typeOf('tmp'), PRISM_TYPE.PRISM);
   });
 });
 

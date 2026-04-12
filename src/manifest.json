@@ -1,7 +1,7 @@
 {
   "name": "PrismFS",
   "id": "prismfs",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "An OPFS-powered, volume-based file system for TurboWarp projects.",
   "author": "Triflare",
   "license": "GPL-3.0-only",
