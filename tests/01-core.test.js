@@ -90,8 +90,16 @@ describe('PrismFSExtension — getInfo()', () => {
     }
 
     // readFile and writeFile were consolidated into readFileAs/writeFileAs.
-    assert.equal(opcodes.includes('readFile'), false, 'readFile block was consolidated into readFileAs');
-    assert.equal(opcodes.includes('writeFile'), false, 'writeFile block was consolidated into writeFileAs');
+    assert.equal(
+      opcodes.includes('readFile'),
+      false,
+      'readFile block was consolidated into readFileAs'
+    );
+    assert.equal(
+      opcodes.includes('writeFile'),
+      false,
+      'writeFile block was consolidated into writeFileAs'
+    );
   });
 
   it('has prismType, readFormat, and permission menus', () => {
